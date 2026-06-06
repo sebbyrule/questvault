@@ -79,10 +79,42 @@ export function levelProgress(xpTotal: number) {
   return { level, floor, ceil, pct, toNext: Math.max(0, ceil - xpTotal) };
 }
 
+// Pin the locale so server and client render identical strings (otherwise the
+// runtime default differs — e.g. "7:25 p.m." on the server vs "7:25 PM" in the
+// browser — which triggers a React hydration mismatch).
+const LOCALE = "en-US";
+
 export function formatDate(d: Date | string | null | undefined): string {
   if (!d) return "—";
   const date = typeof d === "string" ? new Date(d) : d;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return date.toLocaleDateString(LOCALE, { month: "short", day: "numeric" });
+}
+
+/** Date + time, e.g. "Jun 6, 2:30 PM". */
+export function formatDateTime(d: Date | string | null | undefined): string {
+  if (!d) return "—";
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toLocaleString(LOCALE, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** Compact relative time, e.g. "just now", "5m", "3h", "2d". Falls back to a date. */
+export function timeAgo(d: Date | string | null | undefined): string {
+  if (!d) return "—";
+  const date = typeof d === "string" ? new Date(d) : d;
+  const secs = Math.round((Date.now() - date.getTime()) / 1000);
+  if (secs < 45) return "just now";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d`;
+  return formatDate(date);
 }
 
 /** Whole days from now until `d` (negative if past). */

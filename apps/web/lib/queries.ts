@@ -18,6 +18,12 @@ import type { TicketStatus, TicketPriority } from "./format";
 
 export type LabelChip = { id: string; name: string; color: string };
 
+export type Person = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+};
+
 export type BoardTicket = {
   id: string;
   number: number;
@@ -187,4 +193,177 @@ export async function getDefaultReporterId(): Promise<string | null> {
     .orderBy(asc(users.createdAt))
     .limit(1);
   return u[0]?.id ?? null;
+}
+
+/**
+ * The acting user for the web app. Auth is not yet wired (Phase 1 — see README
+ * roadmap), so this resolves to the first seeded user. Replace with the Auth.js
+ * session user once route protection lands.
+ */
+export async function getCurrentUser(): Promise<Person | null> {
+  const u = await db
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      avatarUrl: users.avatarUrl,
+    })
+    .from(users)
+    .orderBy(asc(users.createdAt))
+    .limit(1);
+  return u[0] ?? null;
+}
+
+// ─── Ticket detail ──────────────────────────────────────────────────────────
+
+export type TicketComment = {
+  id: string;
+  body: string;
+  isEdited: boolean;
+  createdAt: Date;
+  author: Person | null;
+  agentId: string | null;
+};
+
+export type TicketHistoryEntry = {
+  id: string;
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  createdAt: Date;
+  actor: Person | null;
+  agentId: string | null;
+};
+
+export type TicketDetail = {
+  id: string;
+  number: number;
+  projectId: string;
+  title: string;
+  description: string | null;
+  status: TicketStatus;
+  priority: TicketPriority;
+  storyPoints: number | null;
+  dueDate: Date | null;
+  prUrl: string | null;
+  createdAt: Date;
+  closedAt: Date | null;
+  assignee: Person | null;
+  reporter: Person | null;
+  sprint: { id: string; name: string } | null;
+  labels: LabelChip[];
+  comments: TicketComment[];
+  history: TicketHistoryEntry[];
+};
+
+const personColumns = { id: true, displayName: true, avatarUrl: true } as const;
+
+/** Full ticket detail: properties, assignee/reporter/sprint, labels, comments, history. */
+export async function getTicketDetail(
+  ticketId: string
+): Promise<TicketDetail | null> {
+  const row = await db.query.tickets.findFirst({
+    where: eq(tickets.id, ticketId),
+    columns: { embedding: false },
+    with: {
+      assignee: { columns: personColumns },
+      reporter: { columns: personColumns },
+      sprint: { columns: { id: true, name: true } },
+      comments: {
+        with: { author: { columns: personColumns } },
+        orderBy: (c, { asc }) => [asc(c.createdAt)],
+      },
+      history: {
+        with: { actor: { columns: personColumns } },
+        orderBy: (h, { desc }) => [desc(h.createdAt)],
+      },
+    },
+  });
+  if (!row) return null;
+
+  const labelRows = await db
+    .select({ id: labels.id, name: labels.name, color: labels.color })
+    .from(ticketLabels)
+    .innerJoin(labels, eq(ticketLabels.labelId, labels.id))
+    .where(eq(ticketLabels.ticketId, ticketId));
+
+  return {
+    id: row.id,
+    number: row.number,
+    projectId: row.projectId,
+    title: row.title,
+    description: row.description,
+    status: row.status as TicketStatus,
+    priority: row.priority as TicketPriority,
+    storyPoints: row.storyPoints,
+    dueDate: row.dueDate,
+    prUrl: row.prUrl,
+    createdAt: row.createdAt,
+    closedAt: row.closedAt,
+    assignee: row.assignee,
+    reporter: row.reporter,
+    sprint: row.sprint,
+    labels: labelRows,
+    comments: row.comments.map((c) => ({
+      id: c.id,
+      body: c.body,
+      isEdited: c.isEdited,
+      createdAt: c.createdAt,
+      author: c.author,
+      agentId: c.agentId,
+    })),
+    history: row.history.map((h) => ({
+      id: h.id,
+      field: h.field,
+      oldValue: h.oldValue,
+      newValue: h.newValue,
+      createdAt: h.createdAt,
+      actor: h.actor,
+      agentId: h.agentId,
+    })),
+  };
+}
+
+/** Members of a project (for assignee selection). Falls back to all users if none. */
+export async function getProjectMembers(projectId: string): Promise<Person[]> {
+  const rows = await db
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      avatarUrl: users.avatarUrl,
+    })
+    .from(projectMembers)
+    .innerJoin(users, eq(projectMembers.userId, users.id))
+    .where(eq(projectMembers.projectId, projectId))
+    .orderBy(asc(users.displayName));
+
+  if (rows.length > 0) return rows;
+
+  return db
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      avatarUrl: users.avatarUrl,
+    })
+    .from(users)
+    .orderBy(asc(users.displayName));
+}
+
+/** All labels defined on a project (for label assignment). */
+export async function getProjectLabels(projectId: string): Promise<LabelChip[]> {
+  return db
+    .select({ id: labels.id, name: labels.name, color: labels.color })
+    .from(labels)
+    .where(eq(labels.projectId, projectId))
+    .orderBy(asc(labels.name));
+}
+
+export type SprintOption = { id: string; name: string; status: string };
+
+/** Non-cancelled sprints for a project (for the sprint selector). */
+export async function getProjectSprints(projectId: string): Promise<SprintOption[]> {
+  return db
+    .select({ id: sprints.id, name: sprints.name, status: sprints.status })
+    .from(sprints)
+    .where(and(eq(sprints.projectId, projectId), ne(sprints.status, "cancelled")))
+    .orderBy(desc(sprints.createdAt));
 }

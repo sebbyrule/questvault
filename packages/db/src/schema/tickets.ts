@@ -205,6 +205,17 @@ export const commentsRelations = relations(comments, ({ one }) => ({
   }),
 }));
 
+export const ticketHistoryRelations = relations(ticketHistory, ({ one }) => ({
+  ticket: one(tickets, {
+    fields: [ticketHistory.ticketId],
+    references: [tickets.id],
+  }),
+  actor: one(users, {
+    fields: [ticketHistory.actorId],
+    references: [users.id],
+  }),
+}));
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Ticket = typeof tickets.$inferSelect;

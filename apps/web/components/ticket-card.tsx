@@ -3,6 +3,7 @@
 // A board ticket card. Hovering reveals ← / → controls that move the ticket to
 // the adjacent column via the moveTicket server action (optimistic transition).
 import { useTransition } from "react";
+import Link from "next/link";
 import { clsx } from "clsx";
 import { Avatar, PriorityBadge, LabelChip } from "./ui";
 import { BOARD_COLUMNS, type TicketStatus } from "@/lib/format";
@@ -32,7 +33,12 @@ export function TicketCard({ ticket }: { ticket: BoardTicket }) {
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium leading-snug text-gray-900">{ticket.title}</p>
+        <Link
+          href={`/board/${ticket.id}`}
+          className="text-sm font-medium leading-snug text-gray-900 hover:text-brand-600 hover:underline"
+        >
+          {ticket.title}
+        </Link>
         <PriorityBadge priority={ticket.priority} />
       </div>
 
