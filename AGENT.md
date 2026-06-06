@@ -156,12 +156,22 @@ pnpm db:seed               # Seed dev fixtures
 
 ## MCP Tools Available to This Agent
 
-The MCP tool definitions live in `packages/mcp-server`. **Heads-up:** they are
-not yet served over HTTP — `pnpm dev` currently starts only the web app (`:3002`)
-and the API (`:3001`); there is no `/mcp` endpoint and nothing listening on
-`MCP_PORT` (`3003`) yet. That wiring is Phase 4 (see Build Roadmap in the SDD).
-The interface below is the intended contract: once served, the endpoint will be
-`http://localhost:3003/mcp`, authenticated with `Authorization: Bearer $MCP_AGENT_SECRET`.
+The tool definitions live in the shared `packages/tools` registry and are served
+over HTTP by `packages/mcp-server`. `pnpm dev` now starts the MCP server on
+`MCP_PORT` (`3003`) alongside the web app (`:3002`) and API (`:3001`).
+
+- **Endpoint:** `POST http://localhost:3003/mcp` (MCP Streamable HTTP transport,
+  stateless). `GET /health` is unauthenticated.
+- **Auth:** `Authorization: Bearer $MCP_AGENT_SECRET`. An optional `X-Agent-Id`
+  header labels the caller in `agent_audit_log` (defaults to `mcp-agent`).
+- **Identity:** agent-created tickets are reported by the seeded *QuestVault Agent*
+  system user (`MCP_AGENT_REPORTER_ID`); comments/history carry the text agent id.
+- Connect any MCP client (e.g. the SDK's `StreamableHTTPClientTransport`). Adding
+  a tool = add one file under `packages/tools/src/defs/` and list it in the
+  registry — both the MCP server and the in-app coach pick it up.
+
+> Not yet implemented (later Phase 4 increments): per-agent scoped tokens
+> (currently a single shared secret) and webhook callbacks.
 
 | Tool | Description |
 |------|-------------|

@@ -58,10 +58,18 @@ async function seed() {
         xpTotal: 85,
         streakDays: 0,
       },
+      {
+        // System account used as the reporter/author for MCP agent actions.
+        // Its id matches MCP_AGENT_REPORTER_ID in .env so create_ticket works
+        // out of the box. Excluded from the leaderboard (internal email domain).
+        id: "00000000-0000-0000-0000-000000000000",
+        email: "agent@questvault.internal",
+        displayName: "QuestVault Agent",
+      },
     ])
     .returning();
 
-  console.log("  ✓ Users: alice, bob, carol");
+  console.log("  ✓ Users: alice, bob, carol, agent");
 
   // ── Project ────────────────────────────────────────────────────────────────
   const [project] = await db

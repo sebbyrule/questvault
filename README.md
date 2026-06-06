@@ -185,7 +185,8 @@ questvault/
 │   ├── api-client/       Shared Zod schemas
 │   ├── db/               Drizzle schema + migrations + seed (source of truth)
 │   ├── gamification/     XP rules engine, levels, anti-gaming guards
-│   ├── mcp-server/       MCP tool definitions (not yet served — see Roadmap)
+│   ├── tools/            Shared, extensible tool registry (MCP + AI coach)
+│   ├── mcp-server/       Serves the tool registry over HTTP on :3003 (MCP)
 │   └── storage/          File storage (local + S3)
 ├── services/
 │   ├── api/              Express REST + SSE API
@@ -225,9 +226,11 @@ Phases mirror the [SDD](QuestVault_SDD.docx). Status reflects the current codeba
 - [ ] Proactive nudges (scheduled coach service)
 - [ ] Semantic ticket search (pgvector HNSW; index already created)
 
-### Phase 4 — Agents (MCP)  ·  ⚪ planned
-- [ ] Serve the MCP tools over HTTP on `:3003` (`packages/mcp-server` is built)
-- [ ] Scoped agent tokens + immutable audit log enforcement
+### Phase 4 — Agents (MCP)  ·  🟡 in progress
+- [x] Shared, extensible tool registry (`packages/tools`) — all 7 tools
+- [x] Serve the MCP tools over HTTP on `:3003` (Streamable HTTP, bearer auth, audit log)
+- [ ] AI coach calls the same tools (in-app tool-use)
+- [ ] Scoped per-agent tokens (currently a shared secret)
 - [ ] Webhook callbacks + Claude Code integration tests
 
 ### Phase 5 — Scale & launch  ·  ⚪ planned

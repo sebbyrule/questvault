@@ -1,34 +1,22 @@
 /**
  * QuestVault MCP Server
  *
- * Exposes ticket management tools to MCP-compatible agents (Claude Code, etc.)
- * over HTTP/SSE. Each tool call is validated, executed, and logged to
- * agent_audit_log before returning.
+ * Exposes the shared @questvault/tools registry to MCP-compatible agents
+ * (Claude Code, Hermes, etc.) over HTTP. Each tool call is validated by the
+ * tool's Zod schema, executed, and logged to agent_audit_log.
  *
- * Transport: HTTP (Streamable HTTP transport per MCP spec 2025-03-26)
- * Auth:      Bearer token checked against MCP_AGENT_SECRET env var
- *            (extend to per-agent DB tokens in Phase 4)
+ * This module builds the McpServer; the HTTP transport lives in http.ts.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createHash } from "crypto";
-import { db } from "@questvault/db";
+import { createHash } from "node:crypto";
 import { agentAuditLog } from "@questvault/db/schema";
-import { listTicketsSchema, listTickets } from "./tools/list-tickets.js";
-import { createTicketSchema, createTicket } from "./tools/create-ticket.js";
-import { closeTicketSchema, closeTicket } from "./tools/close-ticket.js";
-
-// ─── Server setup ─────────────────────────────────────────────────────────────
-
-export const server = new McpServer({
-  name: "questvault",
-  version: "0.1.0",
-});
+import { allTools, type ToolContext } from "@questvault/tools";
 
 // ─── Audit helper ─────────────────────────────────────────────────────────────
 
 async function audit(
-  agentId: string,
+  ctx: ToolContext,
   toolName: string,
   input: unknown,
   fn: () => Promise<unknown>
@@ -40,17 +28,15 @@ async function audit(
 
   let success = true;
   let errorCode: string | undefined;
-  let result: unknown;
-
   try {
-    result = await fn();
+    return await fn();
   } catch (err) {
     success = false;
     errorCode = err instanceof Error ? err.message : "UNKNOWN";
     throw err;
   } finally {
-    await db.insert(agentAuditLog).values({
-      agentId,
+    await ctx.db.insert(agentAuditLog).values({
+      agentId: ctx.agentId,
       toolName,
       inputHash,
       outputSummary: success ? "ok" : errorCode ?? null,
@@ -59,55 +45,34 @@ async function audit(
       errorCode: errorCode ?? null,
     });
   }
-
-  return result;
 }
 
-// ─── Tool: list_tickets ───────────────────────────────────────────────────────
+// ─── Server factory ────────────────────────────────────────────────────────────
 
-server.tool(
-  "list_tickets",
-  "List tickets in a project with optional filters.",
-  listTicketsSchema.shape,
-  async (input) => {
-    const agentId = "agent"; // TODO: derive from auth context
-    const validated = listTicketsSchema.parse(input);
-    const result = await audit(agentId, "list_tickets", validated, () =>
-      listTickets(db, validated)
+/**
+ * Build an McpServer with every registry tool registered for the given context.
+ * In stateless HTTP serving a fresh server is created per request.
+ */
+export function createServer(ctx: ToolContext): McpServer {
+  const server = new McpServer({ name: "questvault", version: "0.1.0" });
+
+  for (const tool of allTools) {
+    server.tool(
+      tool.name,
+      tool.description,
+      tool.inputSchema.shape,
+      async (args: unknown) => {
+        const result = await audit(ctx, tool.name, args, () =>
+          tool.execute(args, ctx)
+        );
+        return {
+          content: [
+            { type: "text" as const, text: JSON.stringify(result, null, 2) },
+          ],
+        };
+      }
     );
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   }
-);
 
-// ─── Tool: create_ticket ──────────────────────────────────────────────────────
-
-server.tool(
-  "create_ticket",
-  "Create a new ticket in a project.",
-  createTicketSchema.shape,
-  async (input) => {
-    const agentId = "agent";
-    const AGENT_REPORTER_ID = process.env.MCP_AGENT_REPORTER_ID ?? "";
-    const validated = createTicketSchema.parse(input);
-    const result = await audit(agentId, "create_ticket", validated, () =>
-      createTicket(db, validated, AGENT_REPORTER_ID)
-    );
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-// ─── Tool: close_ticket ───────────────────────────────────────────────────────
-
-server.tool(
-  "close_ticket",
-  "Transition a ticket to Done status. Triggers XP award for assignee.",
-  closeTicketSchema.shape,
-  async (input) => {
-    const agentId = "agent";
-    const validated = closeTicketSchema.parse(input);
-    const result = await audit(agentId, "close_ticket", validated, () =>
-      closeTicket(db, validated, agentId)
-    );
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  return server;
+}

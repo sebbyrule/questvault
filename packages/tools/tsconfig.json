@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Consumed directly by the mcp-server and ai bundlers/tsx (exports point at
+    // .ts source), never emitted by tsc — so use Bundler resolution while
+    // keeping the strict checking from the base config.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src"]
+}

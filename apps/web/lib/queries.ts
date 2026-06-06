@@ -152,6 +152,8 @@ export async function getLeaderboard(): Promise<LeaderRow[]> {
       streakDays: users.streakDays,
     })
     .from(users)
+    // Exclude system accounts (e.g. the MCP agent) from the leaderboard.
+    .where(ne(users.email, "agent@questvault.internal"))
     .orderBy(desc(users.xpTotal));
 
   const badgeRows = await db

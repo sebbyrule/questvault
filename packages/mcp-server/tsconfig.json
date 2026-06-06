@@ -8,7 +8,11 @@
     "moduleResolution": "Bundler",
     "noEmit": true,
     "declaration": false,
-    "declarationMap": false
+    "declarationMap": false,
+    // The @modelcontextprotocol/sdk transport types are not authored against
+    // exactOptionalPropertyTypes (e.g. stateless `sessionIdGenerator: undefined`,
+    // `onclose`), so relax just this one flag for the SDK-integrating package.
+    "exactOptionalPropertyTypes": false
   },
   "include": ["src"]
 }
