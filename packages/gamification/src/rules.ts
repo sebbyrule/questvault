@@ -48,7 +48,8 @@ function streakMultiplier(baseXp: number, ctx: GuardContext): number {
     ctx.streakDays * STREAK_MULTIPLIER_PER_DAY,
     STREAK_MULTIPLIER_MAX
   );
-  return Math.round(baseXp * (1 + multiplier));
+  // Floor so streaks never over-award XP (anti-gaming).
+  return Math.floor(baseXp * (1 + multiplier));
 }
 
 function dailyCapGuard(action: string) {
