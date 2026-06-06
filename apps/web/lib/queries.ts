@@ -14,6 +14,7 @@ import {
   projectMembers,
   userBadges,
 } from "@questvault/db/schema";
+import { auth } from "./auth";
 import type { TicketStatus, TicketPriority } from "./format";
 
 export type LabelChip = { id: string; name: string; color: string };
@@ -185,22 +186,16 @@ export async function getProjectCards(): Promise<ProjectCard[]> {
   }));
 }
 
-/** First user, used as a default reporter for dev-created tickets. */
-export async function getDefaultReporterId(): Promise<string | null> {
-  const u = await db
-    .select({ id: users.id })
-    .from(users)
-    .orderBy(asc(users.createdAt))
-    .limit(1);
-  return u[0]?.id ?? null;
-}
-
 /**
- * The acting user for the web app. Auth is not yet wired (Phase 1 — see README
- * roadmap), so this resolves to the first seeded user. Replace with the Auth.js
- * session user once route protection lands.
+ * The acting user for the web app, resolved from the Auth.js session. Returns
+ * null when there is no authenticated session (the (app) layout + middleware
+ * redirect to /auth/login in that case).
  */
 export async function getCurrentUser(): Promise<Person | null> {
+  const session = await auth();
+  const id = session?.user?.id;
+  if (!id) return null;
+
   const u = await db
     .select({
       id: users.id,
@@ -208,7 +203,7 @@ export async function getCurrentUser(): Promise<Person | null> {
       avatarUrl: users.avatarUrl,
     })
     .from(users)
-    .orderBy(asc(users.createdAt))
+    .where(eq(users.id, id))
     .limit(1);
   return u[0] ?? null;
 }

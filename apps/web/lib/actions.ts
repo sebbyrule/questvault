@@ -20,7 +20,7 @@ import {
 } from "@questvault/db/schema";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getDefaultReporterId, getCurrentUser } from "./queries";
+import { getCurrentUser } from "./queries";
 
 /** Revalidate every page a ticket mutation can affect. */
 function revalidateTicket(ticketId: string) {
@@ -66,8 +66,9 @@ export async function createTicket(input: z.input<typeof createSchema>) {
   if (!parsed.success) return { ok: false, error: "Invalid ticket" };
   const { projectId, title, description, priority } = parsed.data;
 
-  const reporterId = await getDefaultReporterId();
-  if (!reporterId) return { ok: false, error: "No users exist to report the ticket" };
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "Not signed in" };
+  const reporterId = user.id;
 
   // Next per-project ticket number. (Single-writer dev path; the
   // unique (project_id, number) constraint guards against collisions.)

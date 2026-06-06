@@ -204,13 +204,13 @@ questvault/
 
 Phases mirror the [SDD](QuestVault_SDD.docx). Status reflects the current codebase.
 
-### Phase 1 — Core MVP  ·  🟡 in progress
+### Phase 1 — Core MVP  ·  🟢 done
 - [x] PostgreSQL schema, migrations, seed (triggers, constraints, pgvector)
 - [x] Kanban board — view, create, and move tickets
 - [x] Projects & dashboard views
 - [x] REST API with dev-token auth
-- [ ] Full ticket CRUD in the UI (edit, comments, history, labels, assignees)
-- [ ] Real auth (Auth.js handlers mounted; route protection)
+- [x] Full ticket CRUD in the UI (edit, comments, history, labels, assignees)
+- [x] Real auth (Auth.js handlers mounted; route protection; session-attributed writes)
 
 ### Phase 2 — Gamification  ·  🟡 in progress
 - [x] XP rules engine, levels, badges (logic in `packages/gamification`)

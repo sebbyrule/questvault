@@ -4,6 +4,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
+import { Avatar } from "./ui";
+import { signOutAction } from "@/lib/auth-actions";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: "◆" },
@@ -11,7 +13,11 @@ const NAV = [
   { href: "/projects", label: "Projects", icon: "▣" },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({
+  user,
+}: {
+  user?: { name: string; email: string };
+}) {
   const pathname = usePathname();
 
   return (
@@ -44,8 +50,29 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="border-t border-gray-100 px-5 py-4 text-xs text-gray-400">
-        Dev workspace · localhost
+      <div className="border-t border-gray-100 p-3">
+        {user ? (
+          <div className="flex items-center gap-2 px-2 py-1.5">
+            <Avatar name={user.name} size="sm" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-gray-800">{user.name}</p>
+              {user.email && (
+                <p className="truncate text-xs text-gray-400">{user.email}</p>
+              )}
+            </div>
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                title="Sign out"
+                className="rounded-md px-2 py-1 text-xs font-medium text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+        ) : (
+          <p className="px-2 text-xs text-gray-400">Dev workspace · localhost</p>
+        )}
       </div>
     </aside>
   );
