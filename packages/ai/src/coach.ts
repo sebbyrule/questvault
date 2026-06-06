@@ -1,27 +1,36 @@
 /**
- * AI Coach — answers user questions grounded in their actual work context.
- * Streams back text deltas via AsyncIterable.
- * Uses the provider-agnostic client (LM Studio locally, Anthropic in prod).
+ * AI Coach — answers questions grounded in the user's work AND can take action by
+ * calling the shared @questvault/tools registry (list/get/create/update/close
+ * tickets, comment, list sprints). Streams reasoning/text deltas plus tool
+ * activity via AsyncIterable. Uses the provider-agnostic tool-calling loop.
+ *
+ * Coach-initiated writes are attributed to the QuestVault Agent system user
+ * (agentId "coach", reporter = MCP_AGENT_REPORTER_ID).
  */
 
-import { streamChat, type ChatMessage, type StreamChunk } from "./client.js";
+import { streamChatWithTools, type ChatMessage, type StreamChunk } from "./client.js";
+import { toToolSpecs } from "./tool-schema.js";
 import type { Database } from "@questvault/db";
+import { allTools, toolsByName, type ToolContext } from "@questvault/tools";
 import { buildCoachContext } from "./context.js";
 
 const SYSTEM_PROMPT = `You are the QuestVault AI Coach — a pragmatic, direct assistant embedded inside a project management tool.
 
-You have access to the user's current tickets, sprint status, and work context (provided below).
+You have access to the user's current tickets, sprint status, and work context (provided below), plus tools to read fresh data and take actions on their behalf.
+
 Your job is to help the user:
 - Prioritise and unblock their work
 - Identify risks in the current sprint
-- Break large tickets into actionable subtasks
-- Give concise, grounded advice (not generic productivity tips)
+- Break large tickets into actionable subtasks (create them with the create_ticket tool when asked)
+- Read, update, comment on, and close tickets when the user asks you to
 
 Rules:
-- Be brief. Most answers should be 2-4 sentences unless the user asks for more.
-- Reference specific ticket numbers (QV-N) when relevant.
-- Never make up ticket information not present in the context.
-- If you don't have enough context to answer confidently, say so and ask a clarifying question.`;
+- Use tools to act when the user requests a change (e.g. "create a ticket", "close QV-4", "assign this to me"). Prefer tools over guessing or describing what you would do.
+- Use tools to fetch details you don't already have (e.g. get_ticket before editing a specific ticket).
+- After acting, briefly confirm what you did, referencing ticket numbers (QV-N).
+- Be concise. Most answers should be 2-4 sentences unless the user asks for more.
+- Never invent ticket information not present in the context or returned by a tool.
+- If you don't have enough context to act confidently, ask a clarifying question instead.`;
 
 export async function* streamCoachResponse(
   db: Database,
@@ -34,6 +43,8 @@ export async function* streamCoachResponse(
 
   const systemWithContext = `${SYSTEM_PROMPT}
 
+The current project_id is ${projectId}. Pass it as project_id when calling tools that need one (e.g. list_tickets, create_ticket, list_sprints).
+
 --- CURRENT WORK CONTEXT ---
 ${context}
 ---`;
@@ -44,6 +55,21 @@ ${context}
     { role: "user", content: userMessage },
   ];
 
-  // Reasoning models spend tokens thinking before the answer — give headroom.
-  yield* streamChat(messages, { maxTokens: 2048, temperature: 0.7 });
+  const ctx: ToolContext = {
+    db,
+    agentId: "coach",
+    reporterId:
+      process.env.MCP_AGENT_REPORTER_ID ?? "00000000-0000-0000-0000-000000000000",
+  };
+
+  const execute = async (name: string, args: unknown): Promise<unknown> => {
+    const tool = toolsByName[name];
+    if (!tool) throw new Error(`Unknown tool: ${name}`);
+    return tool.execute(args, ctx);
+  };
+
+  yield* streamChatWithTools(messages, toToolSpecs(allTools), execute, {
+    maxTokens: 2048,
+    temperature: 0.7,
+  });
 }

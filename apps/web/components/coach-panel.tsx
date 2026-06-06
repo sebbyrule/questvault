@@ -8,7 +8,14 @@ import { clsx } from "clsx";
 import { Markdown } from "./markdown";
 
 type Role = "user" | "assistant";
-type Msg = { role: Role; content: string; reasoning?: string; error?: boolean };
+type ToolActivity = { name: string; running: boolean; ok?: boolean };
+type Msg = {
+  role: Role;
+  content: string;
+  reasoning?: string;
+  tools?: ToolActivity[];
+  error?: boolean;
+};
 
 const SUGGESTIONS = [
   "What should I focus on today?",
@@ -79,6 +86,27 @@ export function CoachPanel() {
           return copy;
         });
 
+      const applyTool = (info: { name: string; phase: string; ok?: boolean }) =>
+        setMessages((m) => {
+          const copy = [...m];
+          const last = copy[copy.length - 1];
+          if (!last || last.role !== "assistant") return copy;
+          const tools = [...(last.tools ?? [])];
+          if (info.phase === "call") {
+            tools.push({ name: info.name, running: true });
+          } else {
+            // Mark the most recent running call of this tool as finished.
+            for (let i = tools.length - 1; i >= 0; i--) {
+              if (tools[i]!.name === info.name && tools[i]!.running) {
+                tools[i] = { name: info.name, running: false, ok: info.ok };
+                break;
+              }
+            }
+          }
+          copy[copy.length - 1] = { ...last, tools };
+          return copy;
+        });
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -92,8 +120,17 @@ export function CoachPanel() {
           if (payload === "[DONE]") continue;
           try {
             const obj = JSON.parse(payload) as { type?: string; delta?: string };
-            if (typeof obj.delta === "string" && obj.delta) {
-              received = true;
+            if (typeof obj.delta !== "string" || !obj.delta) continue;
+            received = true;
+            if (obj.type === "tool") {
+              try {
+                applyTool(
+                  JSON.parse(obj.delta) as { name: string; phase: string; ok?: boolean }
+                );
+              } catch {
+                /* ignore malformed tool payload */
+              }
+            } else {
               const kind = obj.type === "reasoning" ? "reasoning" : "text";
               if (kind === "text") gotText = true;
               append(kind, obj.delta);
@@ -113,7 +150,12 @@ export function CoachPanel() {
         setMessages((m) => {
           const copy = [...m];
           const last = copy[copy.length - 1];
-          if (last && last.role === "assistant" && !last.content) {
+          if (
+            last &&
+            last.role === "assistant" &&
+            !last.content &&
+            !(last.tools && last.tools.length > 0)
+          ) {
             copy[copy.length - 1] = {
               ...last,
               content:
@@ -209,6 +251,26 @@ export function CoachPanel() {
                         {m.reasoning}
                       </div>
                     </details>
+                  )}
+                  {m.tools && m.tools.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {m.tools.map((t, ti) => (
+                        <span
+                          key={ti}
+                          className={clsx(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                            t.running
+                              ? "bg-brand-50 text-brand-600"
+                              : t.ok === false
+                                ? "bg-red-50 text-red-600"
+                                : "bg-teal-50 text-teal-700"
+                          )}
+                        >
+                          <span>{t.running ? "⚙" : t.ok === false ? "✕" : "✓"}</span>
+                          {t.name}
+                        </span>
+                      ))}
+                    </div>
                   )}
                   {(m.content || (busy && isLast)) && (
                     <div

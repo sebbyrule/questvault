@@ -20,7 +20,9 @@ through environment variables alone.
 - **Dashboard** — ticket counts by status, sprint progress with countdown, and an XP
   leaderboard (levels, streaks, badge counts) computed from the gamification rules.
 - **Projects** — project cards with completion progress and member/ticket counts.
-- **AI Coach** — a streaming chat panel grounded in your real tickets and sprint.
+- **AI Coach** — a streaming chat panel grounded in your real tickets and sprint
+  that can also **take actions** via the shared tool registry (create/update/close
+  tickets, comment, list sprints) — each tool call shows as an activity chip.
   Answers are rendered as Markdown; reasoning-model "thinking" is streamed into a
   collapsible section.
 - **Database** — full schema with migrations, an idempotent seed, `updated_at`
@@ -229,7 +231,7 @@ Phases mirror the [SDD](QuestVault_SDD.docx). Status reflects the current codeba
 ### Phase 4 — Agents (MCP)  ·  🟡 in progress
 - [x] Shared, extensible tool registry (`packages/tools`) — all 7 tools
 - [x] Serve the MCP tools over HTTP on `:3003` (Streamable HTTP, bearer auth, audit log)
-- [ ] AI coach calls the same tools (in-app tool-use)
+- [x] AI coach calls the same tools (in-app tool-use, both LM Studio + Anthropic)
 - [ ] Scoped per-agent tokens (currently a shared secret)
 - [ ] Webhook callbacks + Claude Code integration tests
 

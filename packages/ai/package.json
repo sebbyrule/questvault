@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@questvault/db": "workspace:*",
-    "zod": "^3.23.0"
+    "@questvault/tools": "workspace:*",
+    "zod": "^3.23.0",
+    "zod-to-json-schema": "^3.23.0"
   },
   "devDependencies": {
     "vitest": "^1.6.0",
