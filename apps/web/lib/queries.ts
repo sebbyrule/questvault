@@ -42,6 +42,32 @@ export async function getPrimaryProject() {
   });
 }
 
+export async function getProjectBySlug(slug: string) {
+  return db.query.projects.findFirst({
+    where: eq(projects.slug, slug),
+  });
+}
+
+export type ProjectOption = {
+  id: string;
+  name: string;
+  slug: string;
+  iconEmoji: string | null;
+};
+
+/** Lightweight list of projects for the board's project switcher. */
+export async function getProjectOptions(): Promise<ProjectOption[]> {
+  return db
+    .select({
+      id: projects.id,
+      name: projects.name,
+      slug: projects.slug,
+      iconEmoji: projects.iconEmoji,
+    })
+    .from(projects)
+    .orderBy(asc(projects.createdAt));
+}
+
 /** All non-archived tickets for a project, with assignee + labels attached. */
 export async function getBoardTickets(projectId: string): Promise<BoardTicket[]> {
   const rows = await db.query.tickets.findMany({
@@ -233,6 +259,7 @@ export type TicketDetail = {
   id: string;
   number: number;
   projectId: string;
+  projectSlug: string;
   title: string;
   description: string | null;
   status: TicketStatus;
@@ -260,6 +287,7 @@ export async function getTicketDetail(
     where: eq(tickets.id, ticketId),
     columns: { embedding: false },
     with: {
+      project: { columns: { slug: true } },
       assignee: { columns: personColumns },
       reporter: { columns: personColumns },
       sprint: { columns: { id: true, name: true } },
@@ -285,6 +313,7 @@ export async function getTicketDetail(
     id: row.id,
     number: row.number,
     projectId: row.projectId,
+    projectSlug: row.project.slug,
     title: row.title,
     description: row.description,
     status: row.status as TicketStatus,

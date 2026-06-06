@@ -29,7 +29,7 @@ export default async function ProjectsPage() {
           {projects.map((p) => {
             const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
             return (
-              <Link key={p.id} href="/board">
+              <Link key={p.id} href={`/board?project=${p.slug}`}>
                 <Card className="h-full p-5 transition hover:border-brand-200 hover:shadow-sm">
                   <div className="flex items-center gap-3">
                     <span

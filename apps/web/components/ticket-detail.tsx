@@ -134,7 +134,10 @@ export function TicketDetail({
       {/* Header */}
       <header className="border-b border-gray-200 bg-white px-8 py-4">
         <div className="flex items-center gap-3 text-sm text-gray-400">
-          <Link href="/board" className="hover:text-gray-600">
+          <Link
+            href={`/board?project=${ticket.projectSlug}`}
+            className="hover:text-gray-600"
+          >
             ← Board
           </Link>
           <span className="font-mono">QV-{ticket.number}</span>

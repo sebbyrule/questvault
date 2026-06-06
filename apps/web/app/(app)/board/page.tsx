@@ -1,19 +1,37 @@
 import type { Metadata } from "next";
-import { getPrimaryProject, getBoardTickets } from "@/lib/queries";
+import {
+  getPrimaryProject,
+  getProjectBySlug,
+  getProjectOptions,
+  getBoardTickets,
+} from "@/lib/queries";
 import { BOARD_COLUMNS, STATUS_META } from "@/lib/format";
 import { TicketCard } from "@/components/ticket-card";
 import { NewTicketButton } from "@/components/new-ticket";
+import { ProjectSwitcher } from "@/components/project-switcher";
 
 export const metadata: Metadata = { title: "Board" };
 export const dynamic = "force-dynamic";
 
-export default async function BoardPage() {
-  const project = await getPrimaryProject();
+export default async function BoardPage({
+  searchParams,
+}: {
+  searchParams: { project?: string };
+}) {
+  // Resolve the selected project from ?project=<slug>, falling back to the
+  // primary (first) project when absent or unknown.
+  const selected = searchParams.project
+    ? await getProjectBySlug(searchParams.project)
+    : null;
+  const project = selected ?? (await getPrimaryProject());
   if (!project) {
     return <EmptyState />;
   }
 
-  const tickets = await getBoardTickets(project.id);
+  const [tickets, projectOptions] = await Promise.all([
+    getBoardTickets(project.id),
+    getProjectOptions(),
+  ]);
   const byStatus = (status: string) => tickets.filter((t) => t.status === status);
 
   return (
@@ -27,7 +45,10 @@ export default async function BoardPage() {
             {tickets.length} active {tickets.length === 1 ? "ticket" : "tickets"} · hover a card to move it
           </p>
         </div>
-        <NewTicketButton projectId={project.id} />
+        <div className="flex items-center gap-3">
+          <ProjectSwitcher projects={projectOptions} currentSlug={project.slug} />
+          <NewTicketButton projectId={project.id} />
+        </div>
       </header>
 
       <div className="flex-1 overflow-x-auto p-6">
