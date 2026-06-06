@@ -53,10 +53,10 @@ async function audit(
       agentId,
       toolName,
       inputHash,
-      outputSummary: success ? "ok" : errorCode,
+      outputSummary: success ? "ok" : errorCode ?? null,
       durationMs: Date.now() - start,
       success,
-      errorCode,
+      errorCode: errorCode ?? null,
     });
   }
 

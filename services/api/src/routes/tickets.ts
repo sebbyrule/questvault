@@ -58,12 +58,12 @@ ticketsRouter.post("/projects/:projectId/tickets", async (req, res, next) => {
         projectId,
         reporterId,
         title: body.title,
-        description: body.description,
+        description: body.description ?? null,
         priority: body.priority,
-        assigneeId: body.assigneeId,
-        sprintId: body.sprintId,
-        storyPoints: body.storyPoints,
-        parentId: body.parentId,
+        assigneeId: body.assigneeId ?? null,
+        sprintId: body.sprintId ?? null,
+        storyPoints: body.storyPoints ?? null,
+        parentId: body.parentId ?? null,
       })
       .returning();
 

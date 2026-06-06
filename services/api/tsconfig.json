@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Run via tsx in dev; typecheck only with tsc (--noEmit). Bundler resolution
+    // lets the extensionless/`.js` relative imports resolve to .ts source while
+    // keeping the strict checking from the base config.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src"]
+}

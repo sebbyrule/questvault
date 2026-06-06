@@ -36,12 +36,12 @@ export async function createTicket(
       number: nextNumber,
       projectId: input.project_id,
       title: input.title,
-      description: input.description,
+      description: input.description ?? null,
       priority: input.priority,
-      assigneeId: input.assignee_id,
-      sprintId: input.sprint_id,
-      storyPoints: input.story_points,
-      parentId: input.parent_id,
+      assigneeId: input.assignee_id ?? null,
+      sprintId: input.sprint_id ?? null,
+      storyPoints: input.story_points ?? null,
+      parentId: input.parent_id ?? null,
       reporterId,
     })
     .returning();

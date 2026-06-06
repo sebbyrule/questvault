@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Consumed directly by the Next.js/service bundlers (exports point at .ts
+    // source), never emitted by tsc — so use Bundler resolution while keeping
+    // the strict checking from the base config. The .test.ts file imports
+    // vitest helpers explicitly, so no global types are required.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"]
+  },
+  "include": ["src"]
+}
