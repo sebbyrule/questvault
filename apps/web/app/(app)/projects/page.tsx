@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getProjectCards } from "@/lib/queries";
 import { Card } from "@/components/ui";
+import { NewProjectButton } from "@/components/new-project";
 
 export const metadata: Metadata = { title: "Projects" };
 export const dynamic = "force-dynamic";
@@ -11,17 +12,18 @@ export default async function ProjectsPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-8 py-8">
-      <header className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
-          {projects.length} {projects.length === 1 ? "project" : "projects"}
-        </p>
+      <header className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
+          <p className="mt-0.5 text-sm text-gray-500">
+            {projects.length} {projects.length === 1 ? "project" : "projects"}
+          </p>
+        </div>
+        <NewProjectButton />
       </header>
 
       {projects.length === 0 ? (
-        <p className="text-sm text-gray-400">
-          No projects yet. Run <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono">pnpm db:seed</code>.
-        </p>
+        <p className="text-sm text-gray-400">No projects yet — create your first one.</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((p) => {

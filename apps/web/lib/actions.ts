@@ -1,14 +1,11 @@
 "use server";
 
 /**
- * Server actions for ticket mutations. These run on the server and write
- * through @questvault/db, then revalidate the affected pages.
- *
- * NOTE: auth is not yet wired into the web app, so the reporter for created
- * tickets defaults to the first seeded user. Replace with the session user
- * once Auth.js is mounted.
+ * Server actions for ticket/project mutations. These run on the server and
+ * write through @questvault/db, then revalidate the affected pages. Writes are
+ * attributed to the Auth.js session user via getCurrentUser().
  */
-import { db, eq, and, max, inArray } from "@questvault/db";
+import { db, eq, and, max, inArray, like } from "@questvault/db";
 import {
   tickets,
   comments,
@@ -17,6 +14,8 @@ import {
   labels,
   users,
   sprints,
+  projects,
+  projectMembers,
 } from "@questvault/db/schema";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -255,6 +254,83 @@ export async function updateTicketDetails(ticketId: string, patch: EditTicketInp
 
   revalidateTicket(ticketId);
   return { ok: true };
+}
+
+// ─── Projects ─────────────────────────────────────────────────────────────────
+
+const createProjectSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(100),
+  description: z.string().trim().max(500).optional(),
+  iconEmoji: z.string().trim().max(8).optional(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Color must be a hex value")
+    .optional(),
+});
+
+export type CreateProjectInput = z.input<typeof createProjectSchema>;
+
+/** Turn a project name into a URL-safe slug base ("My App!" -> "my-app"). */
+function slugify(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return base || "project";
+}
+
+/**
+ * Create a project and add the current user as its owner. The slug is derived
+ * from the name and de-duplicated against existing slugs (slug is unique).
+ */
+export async function createProject(input: CreateProjectInput) {
+  const parsed = createProjectSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Invalid project" };
+  }
+  const { name, description, iconEmoji, color } = parsed.data;
+
+  const user = await getCurrentUser();
+  if (!user) return { ok: false as const, error: "Not signed in" };
+
+  // Derive a unique slug. Collisions get a numeric suffix: my-app, my-app-2, …
+  const base = slugify(name);
+  const existing = await db
+    .select({ slug: projects.slug })
+    .from(projects)
+    .where(like(projects.slug, `${base}%`));
+  const taken = new Set(existing.map((r) => r.slug));
+  let slug = base;
+  if (taken.has(slug)) {
+    let n = 2;
+    while (taken.has(`${base}-${n}`)) n++;
+    slug = `${base}-${n}`;
+  }
+
+  const project = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(projects)
+      .values({
+        name,
+        slug,
+        description: description || null,
+        ...(iconEmoji ? { iconEmoji } : {}),
+        ...(color ? { color } : {}),
+      })
+      .returning();
+    if (!created) throw new Error("Failed to create project");
+
+    await tx.insert(projectMembers).values({
+      projectId: created.id,
+      userId: user.id,
+      role: "owner",
+    });
+    return created;
+  });
+
+  revalidatePath("/projects");
+  revalidatePath("/dashboard");
+  return { ok: true as const, projectId: project.id, slug: project.slug };
 }
 
 // ─── Comments ─────────────────────────────────────────────────────────────────
