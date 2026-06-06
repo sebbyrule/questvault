@@ -1,0 +1,46 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+dist
+.next
+out
+build
+
+# Environment files — never commit these
+.env
+.env.local
+.env.*.local
+
+# Turbo cache
+.turbo
+
+# Local file-storage uploads (STORAGE_PROVIDER=local)
+uploads/
+
+# NOTE: Drizzle migrations under packages/db/src/migrations ARE committed —
+# they are the source of truth for applying the schema to any database.
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage

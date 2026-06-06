@@ -1,0 +1,13 @@
+# Normalize line endings to LF in the repo (avoids CRLF churn across machines).
+* text=auto eol=lf
+
+# Binary assets
+*.docx binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+
+# Generated lockfile — keep diffs collapsed in reviews
+pnpm-lock.yaml linguist-generated=true

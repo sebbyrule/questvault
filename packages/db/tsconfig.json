@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The schema/seed are consumed by tsx, drizzle-kit, and the Next.js/service
+    // bundlers — never emitted by tsc — so use Bundler resolution. This keeps
+    // strict checking from the base config while allowing the extensionless
+    // relative imports drizzle-kit 0.22 requires.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src", "drizzle.config.ts"]
+}
