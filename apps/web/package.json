@@ -17,6 +17,7 @@
     "@questvault/db": "workspace:*",
     "@questvault/gamification": "workspace:*",
     "@questvault/storage": "workspace:*",
+    "@questvault/tools": "workspace:*",
     "@tanstack/react-query": "^5.50.0",
     "clsx": "^2.1.0",
     "geist": "^1.7.2",

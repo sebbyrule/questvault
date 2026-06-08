@@ -5,3 +5,4 @@ export * from "./users";
 export * from "./projects";
 export * from "./tickets";
 export * from "./gamification";
+export * from "./settings";

@@ -1,6 +1,7 @@
 export { db } from "./client";
 export type { Database } from "./client";
 export * from "./schema/index";
+export { getAppSettings, updateAppSettings } from "./settings";
 
 // Re-export drizzle query operators so app code can compose queries without a
 // direct drizzle-orm dependency (AGENT.md: "Never import drizzle directly in

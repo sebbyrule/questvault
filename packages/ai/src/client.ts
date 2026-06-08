@@ -18,6 +18,35 @@ export interface ChatMessage {
 export interface ChatOptions {
   maxTokens?: number;
   temperature?: number;
+  /** Optional runtime overrides (from workspace settings); each field falls back to env. */
+  config?: LlmConfig;
+}
+
+/** Runtime LLM overrides resolved from workspace settings; null/undefined → use env. */
+export interface LlmConfig {
+  provider?: "lmstudio" | "anthropic";
+  model?: string;
+  baseUrl?: string;
+  apiKey?: string;
+}
+
+/** Map workspace-settings columns onto an LlmConfig (only non-null fields override env). */
+export function resolveLlmConfig(s: {
+  llmProvider?: string | null;
+  llmModel?: string | null;
+  llmBaseUrl?: string | null;
+  llmApiKey?: string | null;
+}): LlmConfig {
+  const provider =
+    s.llmProvider === "lmstudio" || s.llmProvider === "anthropic"
+      ? s.llmProvider
+      : undefined;
+  return {
+    ...(provider ? { provider } : {}),
+    ...(s.llmModel ? { model: s.llmModel } : {}),
+    ...(s.llmBaseUrl ? { baseUrl: s.llmBaseUrl } : {}),
+    ...(s.llmApiKey ? { apiKey: s.llmApiKey } : {}),
+  };
 }
 
 /**
@@ -72,11 +101,11 @@ async function* sseEvents(
 
 // ─── Provider: LM Studio (OpenAI-compatible) ──────────────────────────────────
 
-function getLmStudioConfig() {
+function getLmStudioConfig(config?: LlmConfig) {
   const baseUrl =
-    process.env.LM_STUDIO_BASE_URL ?? "http://localhost:1234/v1";
-  const model = process.env.LM_STUDIO_MODEL ?? "local-model";
-  const apiKey = process.env.LM_STUDIO_API_KEY ?? "lm-studio";
+    config?.baseUrl ?? process.env.LM_STUDIO_BASE_URL ?? "http://localhost:1234/v1";
+  const model = config?.model ?? process.env.LM_STUDIO_MODEL ?? "local-model";
+  const apiKey = config?.apiKey ?? process.env.LM_STUDIO_API_KEY ?? "lm-studio";
   return { baseUrl, model, apiKey };
 }
 
@@ -289,8 +318,8 @@ async function* anthropicStreamChat(
 
 // ─── Unified interface ────────────────────────────────────────────────────────
 
-function getProvider(): "lmstudio" | "anthropic" {
-  const p = process.env.LLM_PROVIDER ?? "lmstudio";
+function getProvider(config?: LlmConfig): "lmstudio" | "anthropic" {
+  const p = config?.provider ?? process.env.LLM_PROVIDER ?? "lmstudio";
   if (p !== "lmstudio" && p !== "anthropic") {
     throw new Error(`Unknown LLM_PROVIDER "${p}". Use "lmstudio" or "anthropic".`);
   }
@@ -340,7 +369,7 @@ async function* lmStudioToolLoop(
   execute: ToolExecutor,
   opts: ChatOptions
 ): AsyncIterable<StreamChunk> {
-  const { baseUrl, model, apiKey } = getLmStudioConfig();
+  const { baseUrl, model, apiKey } = getLmStudioConfig(opts.config);
   const oaiTools = tools.map((t) => ({
     type: "function",
     function: { name: t.name, description: t.description, parameters: t.parameters },
@@ -415,9 +444,9 @@ async function* anthropicToolLoop(
   execute: ToolExecutor,
   opts: ChatOptions
 ): AsyncIterable<StreamChunk> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = opts.config?.apiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-  const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
+  const model = opts.config?.model ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
 
   const system = messages.find((m) => m.role === "system")?.content;
   const convo: any[] = messages
@@ -546,7 +575,7 @@ export function streamChatWithTools(
   execute: ToolExecutor,
   opts: ChatOptions = {}
 ): AsyncIterable<StreamChunk> {
-  return getProvider() === "lmstudio"
+  return getProvider(opts.config) === "lmstudio"
     ? lmStudioToolLoop(messages, tools, execute, opts)
     : anthropicToolLoop(messages, tools, execute, opts);
 }

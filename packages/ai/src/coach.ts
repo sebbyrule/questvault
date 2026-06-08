@@ -8,9 +8,14 @@
  * (agentId "coach", reporter = MCP_AGENT_REPORTER_ID).
  */
 
-import { streamChatWithTools, type ChatMessage, type StreamChunk } from "./client.js";
+import {
+  streamChatWithTools,
+  resolveLlmConfig,
+  type ChatMessage,
+  type StreamChunk,
+} from "./client.js";
 import { toToolSpecs } from "./tool-schema.js";
-import type { Database } from "@questvault/db";
+import { getAppSettings, type Database } from "@questvault/db";
 import { allTools, toolsByName, type ToolContext } from "@questvault/tools";
 import { buildCoachContext } from "./context.js";
 
@@ -39,12 +44,22 @@ export async function* streamCoachResponse(
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }>,
   sprintId?: string
 ): AsyncIterable<StreamChunk> {
-  const context = await buildCoachContext(db, projectId, sprintId);
+  const [context, settings] = await Promise.all([
+    buildCoachContext(db, projectId, sprintId),
+    getAppSettings(db),
+  ]);
 
+  // Tool allowlist: null = all tools. Applies to the coach only (external MCP
+  // agents are governed by their token).
+  const allowed = settings.enabledTools;
+  const tools = allowed ? allTools.filter((t) => allowed.includes(t.name)) : allTools;
+  const allowedNames = new Set(tools.map((t) => t.name));
+
+  const skills = settings.skillsMd?.trim();
   const systemWithContext = `${SYSTEM_PROMPT}
 
 The current project_id is ${projectId}. Pass it as project_id when calling tools that need one (e.g. list_tickets, create_ticket, list_sprints).
-
+${skills ? `\n--- WORKSPACE SKILLS ---\n${skills}\n` : ""}
 --- CURRENT WORK CONTEXT ---
 ${context}
 ---`;
@@ -63,13 +78,15 @@ ${context}
   };
 
   const execute = async (name: string, args: unknown): Promise<unknown> => {
+    if (!allowedNames.has(name)) throw new Error(`Tool not allowed: ${name}`);
     const tool = toolsByName[name];
     if (!tool) throw new Error(`Unknown tool: ${name}`);
     return tool.execute(args, ctx);
   };
 
-  yield* streamChatWithTools(messages, toToolSpecs(allTools), execute, {
+  yield* streamChatWithTools(messages, toToolSpecs(tools), execute, {
     maxTokens: 2048,
     temperature: 0.7,
+    config: resolveLlmConfig(settings),
   });
 }

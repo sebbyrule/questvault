@@ -1,11 +1,11 @@
-import type { ToolDefinition } from "./types.js";
-import { listTicketsTool } from "./defs/list-tickets.js";
-import { getTicketTool } from "./defs/get-ticket.js";
-import { createTicketTool } from "./defs/create-ticket.js";
-import { updateTicketTool } from "./defs/update-ticket.js";
-import { closeTicketTool } from "./defs/close-ticket.js";
-import { addCommentTool } from "./defs/add-comment.js";
-import { listSprintsTool } from "./defs/list-sprints.js";
+import type { ToolDefinition } from "./types";
+import { listTicketsTool } from "./defs/list-tickets";
+import { getTicketTool } from "./defs/get-ticket";
+import { createTicketTool } from "./defs/create-ticket";
+import { updateTicketTool } from "./defs/update-ticket";
+import { closeTicketTool } from "./defs/close-ticket";
+import { addCommentTool } from "./defs/add-comment";
+import { listSprintsTool } from "./defs/list-sprints";
 
 /**
  * The canonical tool set, shared by every surface (MCP server, AI coach).

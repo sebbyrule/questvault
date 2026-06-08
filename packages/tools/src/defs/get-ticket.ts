@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { tickets, ticketLabels, labels } from "@questvault/db/schema";
 import { eq } from "@questvault/db";
-import type { ToolDefinition } from "../types.js";
+import type { ToolDefinition } from "../types";
 
 const schema = z.object({
   ticket_id: z.string().uuid(),

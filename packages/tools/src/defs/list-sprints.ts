@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { sprints, tickets } from "@questvault/db/schema";
 import { eq, sql, desc } from "@questvault/db";
-import type { ToolDefinition } from "../types.js";
+import type { ToolDefinition } from "../types";
 
 const schema = z.object({
   project_id: z.string().uuid(),

@@ -25,6 +25,10 @@ through environment variables alone.
   tickets, comment, list sprints) — each tool call shows as an activity chip.
   Answers are rendered as Markdown; reasoning-model "thinking" is streamed into a
   collapsible section.
+- **Settings** — a workspace Settings page to choose the LLM provider/model/key,
+  set custom coach instructions (SKILLS.md), restrict which tools the coach may
+  call, and a working directory. Stored in the DB and **overrides the env
+  defaults** (blank fields fall back to env).
 - **Database** — full schema with migrations, an idempotent seed, `updated_at`
   triggers, an `xp_awarded >= 0` check, a unique `(project_id, number)` constraint,
   and a pgvector HNSW index ready for semantic search.

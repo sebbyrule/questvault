@@ -15,6 +15,13 @@
       "when": 1780686275547,
       "tag": "0001_add_triggers_hnsw_and_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780927356940,
+      "tag": "0002_fast_angel",
+      "breakpoints": true
     }
   ]
 }

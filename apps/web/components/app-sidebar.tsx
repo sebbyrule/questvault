@@ -11,6 +11,7 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: "◆" },
   { href: "/board", label: "Board", icon: "▤" },
   { href: "/projects", label: "Projects", icon: "▣" },
+  { href: "/settings", label: "Settings", icon: "⚙" },
 ];
 
 export function AppSidebar({
