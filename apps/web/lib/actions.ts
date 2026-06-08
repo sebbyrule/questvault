@@ -5,7 +5,7 @@
  * write through @questvault/db, then revalidate the affected pages. Writes are
  * attributed to the Auth.js session user via getCurrentUser().
  */
-import { db, eq, and, max, inArray, like } from "@questvault/db";
+import { db, eq, and, max, inArray } from "@questvault/db";
 import {
   tickets,
   comments,
@@ -20,6 +20,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser } from "./queries";
+import { uniqueProjectSlug } from "./slug";
 
 /** Revalidate every page a ticket mutation can affect. */
 function revalidateTicket(ticketId: string) {
@@ -270,15 +271,6 @@ const createProjectSchema = z.object({
 
 export type CreateProjectInput = z.input<typeof createProjectSchema>;
 
-/** Turn a project name into a URL-safe slug base ("My App!" -> "my-app"). */
-function slugify(name: string): string {
-  const base = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return base || "project";
-}
-
 /**
  * Create a project and add the current user as its owner. The slug is derived
  * from the name and de-duplicated against existing slugs (slug is unique).
@@ -293,19 +285,7 @@ export async function createProject(input: CreateProjectInput) {
   const user = await getCurrentUser();
   if (!user) return { ok: false as const, error: "Not signed in" };
 
-  // Derive a unique slug. Collisions get a numeric suffix: my-app, my-app-2, …
-  const base = slugify(name);
-  const existing = await db
-    .select({ slug: projects.slug })
-    .from(projects)
-    .where(like(projects.slug, `${base}%`));
-  const taken = new Set(existing.map((r) => r.slug));
-  let slug = base;
-  if (taken.has(slug)) {
-    let n = 2;
-    while (taken.has(`${base}-${n}`)) n++;
-    slug = `${base}-${n}`;
-  }
+  const slug = await uniqueProjectSlug(name);
 
   const project = await db.transaction(async (tx) => {
     const [created] = await tx

@@ -1,4 +1,5 @@
-import { pgTable, text, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { jsonb } from "./json";
 
 // ─── Workspace settings ─────────────────────────────────────────────────────
 // Single-row table for the whole workspace. All override columns are nullable —
@@ -18,7 +19,7 @@ export const appSettings = pgTable("app_settings", {
   skillsMd: text("skills_md"), // appended to the coach system prompt
   workingDir: text("working_dir"), // stored for a future autonomous-agent runtime
   // Allowlist of tool names the coach may call; null = all tools allowed.
-  enabledTools: jsonb("enabled_tools").$type<string[] | null>(),
+  enabledTools: jsonb<string[] | null>("enabled_tools"),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

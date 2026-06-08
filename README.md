@@ -25,6 +25,9 @@ through environment variables alone.
   tickets, comment, list sprints) — each tool call shows as an activity chip.
   Answers are rendered as Markdown; reasoning-model "thinking" is streamed into a
   collapsible section.
+- **Templates** — a Template Hub to spin up a project from a built-in preset
+  (Scrum, Bug Tracker, Content Calendar) or a saved template, seeding labels, an
+  active sprint, and starter tickets. Save any existing project as a reusable template.
 - **Settings** — a workspace Settings page to choose the LLM provider/model/key,
   set custom coach instructions (SKILLS.md), restrict which tools the coach may
   call, and a working directory. Stored in the DB and **overrides the env

@@ -19,7 +19,15 @@ export default async function ProjectsPage() {
             {projects.length} {projects.length === 1 ? "project" : "projects"}
           </p>
         </div>
-        <NewProjectButton />
+        <div className="flex items-center gap-2">
+          <Link
+            href="/templates"
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
+          >
+            Browse templates
+          </Link>
+          <NewProjectButton />
+        </div>
       </header>
 
       {projects.length === 0 ? (

@@ -22,6 +22,13 @@
       "when": 1780927356940,
       "tag": "0002_fast_angel",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780928869254,
+      "tag": "0003_ambiguous_wendell_rand",
+      "breakpoints": true
     }
   ]
 }
