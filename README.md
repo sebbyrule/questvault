@@ -37,6 +37,10 @@ through environment variables alone.
   and a pgvector HNSW index ready for semantic search.
 - **REST API** — Express server with dev-token auth, ticket endpoints, and the
   AI-coach SSE endpoint.
+- **MCP server** — the 7 ticket tools served over HTTP on `:3003` (Streamable
+  HTTP, bearer auth, audit-logged) so external agents (Claude Code, Hermes, any
+  MCP client) can populate and maintain projects/tasks. The same tools power the
+  in-app coach via one shared registry (`packages/tools`).
 
 See the [Roadmap](#roadmap) for what's next.
 
@@ -108,7 +112,7 @@ pnpm db:seed              # loads dev data: 7 tickets, 3 users, 1 active sprint,
 ### 6. Start the app
 
 ```bash
-pnpm dev                  # web + API in watch mode, via Turborepo
+pnpm dev                  # web + API + MCP server in watch mode, via Turborepo
 ```
 
 | Service | URL |
@@ -116,6 +120,7 @@ pnpm dev                  # web + API in watch mode, via Turborepo
 | Web app (Next.js) | http://localhost:3002 |
 | API server (Express) | http://localhost:3001 |
 | API health check | http://localhost:3001/health |
+| MCP server | http://localhost:3003/mcp (health: http://localhost:3003/health) |
 
 Open **http://localhost:3002** for the landing page → Board / Dashboard / Projects.
 The AI coach is the **✦** button at the bottom-right of any app page.
@@ -134,7 +139,7 @@ The same identity is a dev API token: `Authorization: Bearer dev:alice@example.c
 ## Commands
 
 ```bash
-pnpm dev          # run web + API in watch mode
+pnpm dev          # run web + API + MCP server in watch mode
 pnpm build        # production build (all packages)
 pnpm test         # run all tests (Vitest)
 pnpm lint         # ESLint across packages
@@ -169,6 +174,25 @@ curl -sN -X POST -H "Authorization: Bearer dev:alice@example.com" \
 
 ---
 
+## Connecting an MCP agent
+
+External agents reach the 7 ticket tools at `http://localhost:3003/mcp` (MCP
+Streamable HTTP), authenticated with `Authorization: Bearer $MCP_AGENT_SECRET`
+(default `dev_mcp_secret`). An optional `X-Agent-Id` header labels the caller in
+the `agent_audit_log` table. Tools: `list_tickets`, `get_ticket`, `create_ticket`,
+`update_ticket`, `close_ticket`, `add_comment`, `list_sprints`. Agent-created
+tickets are reported by the seeded **QuestVault Agent** user.
+
+```bash
+curl -s http://localhost:3003/health        # → {"status":"ok",...}
+```
+
+Point any MCP client (e.g. the `@modelcontextprotocol/sdk` `StreamableHTTPClientTransport`)
+at the endpoint with that bearer header to `tools/list` and call tools. See
+[AGENT.md](AGENT.md) for the full tool contract and agent constraints.
+
+---
+
 ## Switching to production providers
 
 No code changes — flip the `*_PROVIDER` vars in `.env.local`:
@@ -179,6 +203,10 @@ AUTH_PROVIDER=github          # + GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
 STORAGE_PROVIDER=s3           # + S3_BUCKET / S3_* credentials
 USE_EMBEDDINGS=true           # enable pgvector semantic search
 ```
+
+The **LLM** provider/model/key can also be set at runtime in the in-app
+**Settings** page — DB-stored values override these env defaults (blank settings
+fall back to env).
 
 ---
 
@@ -239,6 +267,8 @@ Phases mirror the [SDD](QuestVault_SDD.docx). Status reflects the current codeba
 - [x] Shared, extensible tool registry (`packages/tools`) — all 7 tools
 - [x] Serve the MCP tools over HTTP on `:3003` (Streamable HTTP, bearer auth, audit log)
 - [x] AI coach calls the same tools (in-app tool-use, both LM Studio + Anthropic)
+- [x] Workspace Settings (DB-overrides-env LLM config, SKILLS.md, tool allowlist)
+- [x] Project Template Hub (built-in presets + save-as-template)
 - [ ] Scoped per-agent tokens (currently a shared secret)
 - [ ] Webhook callbacks + Claude Code integration tests
 
