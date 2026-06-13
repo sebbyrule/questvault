@@ -20,27 +20,32 @@ Turborepo.
 
 ## 2. Current state (as of this handoff)
 
-- Branch `main`, latest commit `e299c6f`, pushed to `origin` (github `sebbyrule/questvault`).
+- Branch `main`, latest commit `87f2b70`, pushed to `origin` (github `sebbyrule/questvault`).
 - `pnpm typecheck` → **9/9 green**. `pnpm --filter @questvault/ai test` and
   `@questvault/gamification test` green. Web production build clean.
 - `pnpm test` (repo-wide) is **not** fully green: `@questvault/mcp-server` declares
   a `test` script but has **no test files**, so vitest exits 1. Pre-existing; not
   yet addressed (see §8).
-- **Since the previous handoff** two features landed on `main` (details in §4):
-  the **gamification XP loop** (`7f04f12`) — ticket actions now award XP for real —
-  and **first-run admin registration** (`e299c6f`) — real sign-up with hashed
-  passwords. **DB now has 5 migrations** (0004 adds `users.password_hash` + `role`);
-  `apps/web` gained a `bcryptjs` dependency, so re-run `pnpm install`.
+- **Since the previous handoff** three features landed on `main` (details in §4):
+  the **gamification XP loop** (`7f04f12`) — ticket actions award XP for real —
+  **first-run admin registration** (`e299c6f`) — real sign-up with hashed
+  passwords — and **team member management** (`87f2b70`) — invite links, workspace
+  roles, deactivation. **DB now has 6 migrations** (0004 = `users.password_hash` +
+  `role`; 0005 = `invites` table + `users.is_active`); `apps/web` gained a
+  `bcryptjs` dependency, so re-run `pnpm install` and `pnpm db:migrate`.
 - Dev servers are currently **stopped**. Docker (Postgres/Redis) may still be up.
 
 ## 3. Architecture map
 
 ```
 apps/web            Next.js app — pages: /board, /board/[ticketId], /dashboard,
-                    /projects, /templates, /settings, /auth/login, /auth/register;
+                    /projects, /templates, /settings (admin), /members (admin),
+                    /auth/login, /auth/register, /auth/invite/[token];
                     API route /api/auth/[...nextauth] and BFF /api/coach;
                     middleware.ts (route protection). Server actions in
-                    lib/*-actions.ts, reads in lib/queries.ts. lib/xp.ts bridges
+                    lib/*-actions.ts (incl. member-actions.ts), reads in
+                    lib/queries.ts; role gating in lib/authz.ts (+ pure
+                    lib/roles.ts). lib/xp.ts bridges
                     ticket actions → gamification; lib/password.ts = bcrypt (Node only).
 packages/db         Drizzle schema (one file per domain under src/schema/),
                     migrations, seed, client. Re-exports drizzle operators so app
@@ -143,6 +148,20 @@ Two threads of work, both already on `main`:
   wrappers that redirect on `adminExists()`; the login form moved to
   `components/auth/login-form.tsx`, with a new `register-form.tsx`. Sidebar shows an
   **ADMIN** pill.
+- `87f2b70` **Team member management.** Migration `0005` adds the `invites` table
+  (email, role, SHA-256 `token_hash`, inviter, expiry, `accepted_at` → single-use,
+  hashed token) and `users.is_active`. `lib/authz.ts` `requireAdmin()` (+ pure
+  `lib/roles.ts` `isAdminRole`, client-safe). `lib/member-actions.ts`: `createInvite`
+  (returns the raw token once; only its hash is stored; 7-day expiry), public
+  `acceptInvite` (sets own password, then the client signs in), `updateUserRole` /
+  `setUserActive` (self-lockout guards), `revokeInvite`. New `/members` admin page
+  (+ `members-manager.tsx`) and public `/auth/invite/[token]` accept page
+  (+ `accept-invite-form.tsx`). **Role gating:** Settings + Members redirect non-admins
+  and are hidden from the sidebar; `authorize()` rejects inactive accounts; the
+  `(app)` layout bounces a *confirmed-inactive* session (NOT a null lookup — see §8).
+  Seed makes **alice an `admin`**. NB: the invite control uses a button `onClick`,
+  not `<form onSubmit>` — a native form submit raced into a page POST that bounced
+  to login (§8).
 
 ## 5. Key decisions & conventions
 
@@ -179,13 +198,18 @@ Two threads of work, both already on `main`:
   flow you need an empty users table (`TRUNCATE users CASCADE;` then visit
   `/auth/login` → it redirects to `/auth/register`); re-seeding closes registration
   again. The first registered user gets `role = "admin"`.
+- **Roles/members:** seed makes **alice `admin`** (bob/carol `member`), so the
+  seeded login can reach `/settings` + `/members`. Admin invites others from
+  Members → a one-time link `/auth/invite/<token>`. To test an invite without the
+  admin UI: insert a row in `invites` with `token_hash = sha256(rawToken)` and open
+  `/auth/invite/<rawToken>`. Deactivated (`is_active=false`) users can't log in.
 
 ## 7. How to run & verify
 
 ```bash
 docker compose up -d                       # Postgres(:5433 locally)+Redis
 pnpm install
-pnpm db:migrate && pnpm db:seed            # 5 migrations; seeds 7 tickets, 3 users + agent
+pnpm db:migrate && pnpm db:seed            # 6 migrations; seeds 7 tickets, 3 users (+agent), alice=admin
 pnpm dev                                    # web:3002, api:3001, mcp:3003
 pnpm typecheck                              # 9/9 green
 ```
@@ -211,6 +235,16 @@ pnpm typecheck                              # 9/9 green
 - **Adding a workspace dep / schema change requires restarting the running Next dev
   server** (it won't hot-resolve a newly added package or a changed `@questvault/db`
   schema). Restart the API too after changing coach/ai/db code.
+- **Don't `<form onSubmit>` for a server-action button under the `(app)` layout.**
+  In the preview/proxy env a native form submit raced into a *page* POST that fell
+  through to a render where `auth()` was null → the layout redirected to
+  `/auth/login` and the action body never ran. Use a plain `<button onClick>` that
+  calls the action (like the board move control). See `members-manager.tsx`.
+- **Layout deactivation check must not redirect on a *null* account.** The `(app)`
+  layout reads `getSessionAccount()`; `auth()` can transiently return null during a
+  Server-Action re-render, so it only redirects when the account is *confirmed
+  inactive* (`account && !account.isActive`), never on `!account`. The logged-out
+  case is already handled by the `!session?.user` guard above it.
 - **Dev-token → users.id:** the Express API's dev token sets `userId = dev:<email>`
   (not a UUID). Web auth resolves a real UUID; the coach/MCP attribute writes to the
   agent user. Don't assume the Express `req.auth.userId` is a real `users` row.
@@ -231,10 +265,13 @@ pnpm typecheck                              # 9/9 green
   triggering surface yet.
 - **Phase 3:** proactive coach nudges (scheduled `services/ai-coach`), semantic
   ticket search (pgvector HNSW index already exists; `USE_EMBEDDINGS`).
+- **Auth/members remainder:** email delivery for invites (currently the link is
+  copied manually), password reset/change, per-project membership management UI,
+  and forced JWT revocation on deactivation (today it takes effect on next nav).
 - **Phase 5:** sprint analytics, GitHub/Slack integrations, billing/SSO/SCIM,
   mobile, perf.
-- **Housekeeping:** mcp-server test script; consider applying custom `jsonb` to
-  `xp_events.metadata`.
+- **Housekeeping:** mcp-server test script (repo `pnpm test` still red); no unit
+  tests yet for `lib/xp.ts` or the auth/member actions.
 
 ## 10. Working agreements observed with the owner
 

@@ -26,6 +26,10 @@ through environment variables alone.
 - **Accounts** — on first launch (empty database) the app shows a **Create admin
   account** form; the first user becomes the workspace admin with a bcrypt-hashed
   password. After that, registration closes and visitors get the login screen.
+- **Members** — an admin-only Members page to invite teammates via one-time links
+  (the invitee sets their own password), change a member's workspace role, and
+  deactivate/reactivate accounts. Workspace role gates the admin surfaces
+  (Members + Settings); deactivated accounts can't sign in.
 - **Projects** — project cards with completion progress and member/ticket counts.
 - **AI Coach** — a streaming chat panel grounded in your real tickets and sprint
   that can also **take actions** via the shared tool registry (create/update/close
@@ -141,9 +145,13 @@ Password: devpass
 
 Seeded users have no stored password, so in **non-production** they sign in with
 the literal `devpass`. A **registered** user (created via the first-run sign-up
-form, or any account with a real password) authenticates against its bcrypt hash
-instead. If you start from an empty database, `/auth/login` redirects to
-`/auth/register` so you can create the admin account.
+form or an invite link, or any account with a real password) authenticates against
+its bcrypt hash instead. If you start from an empty database, `/auth/login`
+redirects to `/auth/register` so you can create the admin account.
+
+`alice@example.com` is seeded as the workspace **admin**, so the seeded login can
+reach the **Members** and **Settings** pages (bob/carol are members). From Members,
+an admin invites others and manages roles.
 
 The same identity is a dev API token: `Authorization: Bearer dev:alice@example.com`.
 
@@ -263,6 +271,7 @@ Phases mirror the [SDD](QuestVault_SDD.docx). Status reflects the current codeba
 - [x] Full ticket CRUD in the UI (edit, comments, history, labels, assignees)
 - [x] Real auth (Auth.js handlers mounted; route protection; session-attributed writes)
 - [x] First-run admin registration + bcrypt-hashed credentials (dev `devpass` fallback)
+- [x] Member management — invite links, workspace roles, deactivation; role-gated admin pages
 
 ### Phase 2 — Gamification  ·  🟡 in progress
 - [x] XP rules engine, levels, badges (logic in `packages/gamification`)
