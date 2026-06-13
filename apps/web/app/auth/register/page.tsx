@@ -1,14 +1,13 @@
 /**
- * Login page (server). On a fresh install (no real users yet) there is nothing
- * to log into — redirect to the first-run admin setup instead. Otherwise render
- * the credentials form.
+ * Registration page (server) — first-run admin setup only. Once any real user
+ * exists, registration is closed: redirect to login.
  */
 import { redirect } from "next/navigation";
 import { adminExists } from "@/lib/queries";
-import { LoginForm } from "@/components/auth/login-form";
+import { RegisterForm } from "@/components/auth/register-form";
 
-export default async function LoginPage() {
-  if (!(await adminExists())) redirect("/auth/register");
+export default async function RegisterPage() {
+  if (await adminExists()) redirect("/auth/login");
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -19,7 +18,7 @@ export default async function LoginPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          <LoginForm />
+          <RegisterForm />
         </div>
       </div>
     </div>

@@ -19,6 +19,7 @@ import { z } from "zod";
 import { db, eq } from "@questvault/db";
 import { users } from "@questvault/db/schema";
 import { authConfig } from "./auth.config";
+import { verifyPassword } from "./password";
 
 const provider = process.env.AUTH_PROVIDER ?? "credentials";
 
@@ -38,18 +39,22 @@ const credentialsProvider = Credentials({
 
     const { email, password } = parsed.data;
 
-    // ⚠️  DEV ONLY: accept any email with password "devpass".
-    // Replace with a real passwordHash + bcrypt.compare() before deploying.
-    if (process.env.NODE_ENV === "production" || password !== "devpass") {
-      return null;
-    }
-
-    // Resolve to a real user row so session.user.id is a valid UUID that the
-    // tickets/comments foreign keys can reference. Create on first login so the
-    // dev "any email works" flow still holds.
     let user = await db.query.users.findFirst({
       where: eq(users.email, email),
     });
+
+    // Registered users (have a password hash) verify via bcrypt — in ALL envs.
+    if (user?.passwordHash) {
+      const ok = await verifyPassword(password, user.passwordHash);
+      return ok ? { id: user.id, email: user.email, name: user.displayName } : null;
+    }
+
+    // Hash-less rows (seeded dev users, or brand-new emails): DEV-ONLY shortcut
+    // — accept the literal "devpass". Find-or-create so session.user.id is a
+    // valid UUID for FK attribution.
+    if (process.env.NODE_ENV === "production" || password !== "devpass") {
+      return null;
+    }
     if (!user) {
       [user] = await db
         .insert(users)

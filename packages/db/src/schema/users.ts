@@ -25,6 +25,12 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   displayName: text("display_name").notNull(),
   avatarUrl: text("avatar_url"),
+  // Auth: bcrypt hash for credentials login. Nullable — OAuth users and the
+  // seeded dev users have none (the credentials provider falls back to the dev
+  // password for hash-less rows in non-production).
+  passwordHash: text("password_hash"),
+  // Workspace-wide role. The first registered user becomes "admin".
+  role: userRoleEnum("role").notNull().default("member"),
   // Gamification
   xpTotal: integer("xp_total").notNull().default(0),
   streakDays: integer("streak_days").notNull().default(0),

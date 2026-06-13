@@ -17,8 +17,10 @@ const NAV = [
 
 export function AppSidebar({
   user,
+  role,
 }: {
   user?: { name: string; email: string };
+  role?: string | null;
 }) {
   const pathname = usePathname();
 
@@ -57,7 +59,14 @@ export function AppSidebar({
           <div className="flex items-center gap-2 px-2 py-1.5">
             <Avatar name={user.name} size="sm" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-gray-800">{user.name}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-sm font-medium text-gray-800">{user.name}</p>
+                {(role === "admin" || role === "owner") && (
+                  <span className="shrink-0 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-600">
+                    {role}
+                  </span>
+                )}
+              </div>
               {user.email && (
                 <p className="truncate text-xs text-gray-400">{user.email}</p>
               )}

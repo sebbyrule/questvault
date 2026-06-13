@@ -6,6 +6,7 @@
 // pass the current user to the sidebar (and as defense-in-depth).
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getSessionRole } from "@/lib/queries";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CoachPanel } from "@/components/coach-panel";
 import { XpToaster } from "@/components/xp-toast";
@@ -22,10 +23,11 @@ export default async function AppLayout({
     name: session.user.name ?? session.user.email ?? "User",
     email: session.user.email ?? "",
   };
+  const role = await getSessionRole();
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
-      <AppSidebar user={user} />
+      <AppSidebar user={user} role={role} />
       <main className="flex-1 overflow-y-auto">{children}</main>
       <CoachPanel />
       <XpToaster />

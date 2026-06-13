@@ -236,6 +236,35 @@ export async function getCurrentUser(): Promise<Person | null> {
   return u[0] ?? null;
 }
 
+/** Internal system account — excluded from "real user" counts. */
+const SYSTEM_EMAIL = "agent@questvault.internal";
+
+/**
+ * True once at least one real (non-system) user exists. Drives the first-run
+ * gate: registration is open only while this is false; afterwards visitors get
+ * login only. Mirrors the leaderboard's system-account exclusion.
+ */
+export async function adminExists(): Promise<boolean> {
+  const [row] = await db
+    .select({ c: count() })
+    .from(users)
+    .where(ne(users.email, SYSTEM_EMAIL));
+  return (row?.c ?? 0) > 0;
+}
+
+/** Role of the current session user (e.g. "admin"), or null when signed out. */
+export async function getSessionRole(): Promise<string | null> {
+  const session = await auth();
+  const id = session?.user?.id;
+  if (!id) return null;
+  const [u] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1);
+  return u?.role ?? null;
+}
+
 // ─── Ticket detail ──────────────────────────────────────────────────────────
 
 export type TicketComment = {
