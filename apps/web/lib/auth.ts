@@ -43,6 +43,9 @@ const credentialsProvider = Credentials({
       where: eq(users.email, email),
     });
 
+    // Deactivated accounts cannot sign in (blocks both the hash and dev paths).
+    if (user && !user.isActive) return null;
+
     // Registered users (have a password hash) verify via bcrypt — in ALL envs.
     if (user?.passwordHash) {
       const ok = await verifyPassword(password, user.passwordHash);

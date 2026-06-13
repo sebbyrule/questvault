@@ -6,12 +6,18 @@ import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 import { Avatar } from "./ui";
 import { signOutAction } from "@/lib/auth-actions";
+import { isAdminRole } from "@/lib/roles";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: "◆" },
   { href: "/board", label: "Board", icon: "▤" },
   { href: "/projects", label: "Projects", icon: "▣" },
   { href: "/templates", label: "Templates", icon: "❒" },
+];
+
+// Admin/owner-only navigation.
+const ADMIN_NAV = [
+  { href: "/members", label: "Members", icon: "♟" },
   { href: "/settings", label: "Settings", icon: "⚙" },
 ];
 
@@ -23,6 +29,7 @@ export function AppSidebar({
   role?: string | null;
 }) {
   const pathname = usePathname();
+  const nav = isAdminRole(role) ? [...NAV, ...ADMIN_NAV] : NAV;
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-gray-200 bg-white">
@@ -34,7 +41,7 @@ export function AppSidebar({
       </Link>
 
       <nav className="flex flex-1 flex-col gap-1 px-3">
-        {NAV.map((item) => {
+        {nav.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link

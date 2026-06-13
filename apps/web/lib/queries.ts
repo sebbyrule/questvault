@@ -3,7 +3,8 @@
  * @questvault/db (never the raw drizzle client — operators are re-exported
  * from the db package per AGENT.md conventions).
  */
-import { db, eq, ne, and, desc, asc, count, inArray } from "@questvault/db";
+import { createHash } from "node:crypto";
+import { db, eq, ne, and, desc, asc, count, inArray, gt, isNull } from "@questvault/db";
 import {
   projects,
   tickets,
@@ -13,6 +14,7 @@ import {
   ticketLabels,
   projectMembers,
   userBadges,
+  invites,
 } from "@questvault/db/schema";
 import { auth } from "./auth";
 import type { TicketStatus, TicketPriority } from "./format";
@@ -252,17 +254,100 @@ export async function adminExists(): Promise<boolean> {
   return (row?.c ?? 0) > 0;
 }
 
-/** Role of the current session user (e.g. "admin"), or null when signed out. */
-export async function getSessionRole(): Promise<string | null> {
+export type SessionAccount = { id: string; role: string; isActive: boolean };
+
+/**
+ * The current session user's account essentials (role + active flag), or null
+ * when signed out or the row no longer exists. Drives admin gating and the
+ * "deactivated → bounce to login" check in the (app) layout.
+ */
+export async function getSessionAccount(): Promise<SessionAccount | null> {
   const session = await auth();
   const id = session?.user?.id;
   if (!id) return null;
   const [u] = await db
-    .select({ role: users.role })
+    .select({ id: users.id, role: users.role, isActive: users.isActive })
     .from(users)
     .where(eq(users.id, id))
     .limit(1);
-  return u?.role ?? null;
+  return u ?? null;
+}
+
+// ─── Members & invites ────────────────────────────────────────────────────────
+
+/** SHA-256 of a raw invite token. The raw token only ever lives in the URL. */
+export function hashToken(raw: string): string {
+  return createHash("sha256").update(raw).digest("hex");
+}
+
+export type MemberRow = {
+  id: string;
+  displayName: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  createdAt: Date;
+};
+
+/** All real (non-system) users for the Members admin page. */
+export async function listMembers(): Promise<MemberRow[]> {
+  return db
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      email: users.email,
+      role: users.role,
+      isActive: users.isActive,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .where(ne(users.email, SYSTEM_EMAIL))
+    .orderBy(asc(users.displayName));
+}
+
+export type PendingInvite = {
+  id: string;
+  email: string;
+  role: string;
+  expiresAt: Date;
+  invitedBy: string | null;
+};
+
+/** Outstanding invites (unaccepted and not expired). */
+export async function listPendingInvites(): Promise<PendingInvite[]> {
+  const rows = await db
+    .select({
+      id: invites.id,
+      email: invites.email,
+      role: invites.role,
+      expiresAt: invites.expiresAt,
+      inviterName: users.displayName,
+    })
+    .from(invites)
+    .leftJoin(users, eq(invites.invitedBy, users.id))
+    .where(and(isNull(invites.acceptedAt), gt(invites.expiresAt, new Date())))
+    .orderBy(desc(invites.createdAt));
+  return rows.map((r) => ({
+    id: r.id,
+    email: r.email,
+    role: r.role,
+    expiresAt: r.expiresAt,
+    invitedBy: r.inviterName,
+  }));
+}
+
+/** Resolve a raw invite token to a valid (pending, unexpired) invite, else null. */
+export async function getInviteByToken(rawToken: string) {
+  if (!rawToken) return null;
+  const [invite] = await db
+    .select()
+    .from(invites)
+    .where(eq(invites.tokenHash, hashToken(rawToken)))
+    .limit(1);
+  if (!invite) return null;
+  if (invite.acceptedAt) return null;
+  if (invite.expiresAt.getTime() <= Date.now()) return null;
+  return invite;
 }
 
 // ─── Ticket detail ──────────────────────────────────────────────────────────

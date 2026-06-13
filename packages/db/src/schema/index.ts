@@ -2,6 +2,7 @@
 // Import from "@questvault/db/schema" in application code.
 
 export * from "./users";
+export * from "./invites";
 export * from "./projects";
 export * from "./tickets";
 export * from "./gamification";

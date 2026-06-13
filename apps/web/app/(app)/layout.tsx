@@ -6,7 +6,7 @@
 // pass the current user to the sidebar (and as defense-in-depth).
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getSessionRole } from "@/lib/queries";
+import { getSessionAccount } from "@/lib/queries";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CoachPanel } from "@/components/coach-panel";
 import { XpToaster } from "@/components/xp-toast";
@@ -19,15 +19,21 @@ export default async function AppLayout({
   const session = await auth();
   if (!session?.user) redirect("/auth/login");
 
+  // Bounce *deactivated* accounts to login — makes admin deactivation take
+  // effect on the next navigation. Only redirect on a confirmed-inactive
+  // account; a null lookup can happen transiently (e.g. during a Server
+  // Action re-render) and must NOT bounce an otherwise-valid session.
+  const account = await getSessionAccount();
+  if (account && !account.isActive) redirect("/auth/login");
+
   const user = {
     name: session.user.name ?? session.user.email ?? "User",
     email: session.user.email ?? "",
   };
-  const role = await getSessionRole();
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
-      <AppSidebar user={user} role={role} />
+      <AppSidebar user={user} role={account?.role ?? null} />
       <main className="flex-1 overflow-y-auto">{children}</main>
       <CoachPanel />
       <XpToaster />

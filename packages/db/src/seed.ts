@@ -43,6 +43,8 @@ async function seed() {
         id: "00000000-0000-0000-0000-000000000001",
         email: "alice@example.com",
         displayName: "Alice Chen",
+        // Workspace admin so the seeded dev login can reach Settings / Members.
+        role: "admin" as const,
         xpTotal: 340,
         streakDays: 5,
         // Active yesterday so today's first action extends the streak (rather

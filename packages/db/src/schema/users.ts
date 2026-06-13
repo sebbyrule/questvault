@@ -31,6 +31,9 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash"),
   // Workspace-wide role. The first registered user becomes "admin".
   role: userRoleEnum("role").notNull().default("member"),
+  // Deactivated accounts cannot sign in (soft delete — avoids cascading their
+  // tickets/comments). Toggled by an admin from the Members page.
+  isActive: boolean("is_active").notNull().default(true),
   // Gamification
   xpTotal: integer("xp_total").notNull().default(0),
   streakDays: integer("streak_days").notNull().default(0),
