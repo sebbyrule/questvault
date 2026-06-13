@@ -1,25 +1,19 @@
 "use server";
 
-import { z } from "zod";
 import { db, eq } from "@questvault/db";
 import { users } from "@questvault/db/schema";
 import { signOut } from "./auth";
 import { adminExists } from "./queries";
 import { hashPassword } from "./password";
+import { registerSchema, type RegisterInput } from "./auth-rules";
+
+export type { RegisterInput };
 
 export async function signOutAction() {
   await signOut({ redirectTo: "/auth/login" });
 }
 
 // ─── Registration (first-run admin setup) ────────────────────────────────────
-
-const registerSchema = z.object({
-  displayName: z.string().trim().min(1, "Name is required").max(80),
-  email: z.string().email("Enter a valid email"),
-  password: z.string().min(8, "Password must be at least 8 characters").max(200),
-});
-
-export type RegisterInput = z.input<typeof registerSchema>;
 
 /**
  * Create the first (admin) user. First-run only: rejected once any real user

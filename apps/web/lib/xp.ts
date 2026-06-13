@@ -28,11 +28,14 @@ import {
   users,
   badges,
   userBadges,
-  xpActionEnum,
 } from "@questvault/db/schema";
-import { ALL_RULES, type GuardContext } from "@questvault/gamification";
-
-type XpActionValue = (typeof xpActionEnum.enumValues)[number];
+import {
+  ALL_RULES,
+  type GuardContext,
+  nextStreak,
+  storedAction,
+  utcMidnight,
+} from "@questvault/gamification";
 
 export type BadgeUnlock = {
   slug: string;
@@ -60,39 +63,8 @@ export type AwardXpOpts = {
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-/** Whole-day index in UTC (days since the epoch). */
-function utcDayNumber(d: Date): number {
-  return Math.floor(d.getTime() / 86_400_000);
-}
-
-function utcMidnight(d: Date): Date {
-  return new Date(utcDayNumber(d) * 86_400_000);
-}
-
-/**
- * The ticket_closed rule reports a generic "ticket_closed" action, but the
- * xp_action enum (and DAILY_CAPS) split it by priority. Everything else maps
- * 1:1 to an enum value.
- */
-function storedAction(action: string, priority?: string): XpActionValue {
-  if (action === "ticket_closed") {
-    return priority === "p0" || priority === "p1"
-      ? "ticket_closed_p0_p1"
-      : "ticket_closed_p2_p3";
-  }
-  return action as XpActionValue;
-}
-
-/** Daily streak transition based on last activity (UTC days). */
-function nextStreak(current: number, lastActiveAt: Date | null, now: Date): number {
-  if (!lastActiveAt) return 1;
-  const last = utcDayNumber(lastActiveAt);
-  const today = utcDayNumber(now);
-  if (last === today) return current || 1; // already counted today
-  if (last === today - 1) return current + 1; // consecutive day
-  return 1; // a gap resets the streak
-}
+// nextStreak / storedAction / utcMidnight are pure domain logic and live in
+// @questvault/gamification (unit-tested there).
 
 /** Today's awarded XP per stored action, for the daily-cap guards. */
 async function buildContext(userId: string, streakDays: number): Promise<GuardContext> {

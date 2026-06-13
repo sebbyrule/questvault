@@ -3,7 +3,6 @@
  * @questvault/db (never the raw drizzle client — operators are re-exported
  * from the db package per AGENT.md conventions).
  */
-import { createHash } from "node:crypto";
 import { db, eq, ne, and, desc, asc, count, inArray, gt, isNull } from "@questvault/db";
 import {
   projects,
@@ -17,6 +16,7 @@ import {
   invites,
 } from "@questvault/db/schema";
 import { auth } from "./auth";
+import { hashToken, isInviteUsable } from "./auth-rules";
 import type { TicketStatus, TicketPriority } from "./format";
 
 export type LabelChip = { id: string; name: string; color: string };
@@ -275,11 +275,6 @@ export async function getSessionAccount(): Promise<SessionAccount | null> {
 
 // ─── Members & invites ────────────────────────────────────────────────────────
 
-/** SHA-256 of a raw invite token. The raw token only ever lives in the URL. */
-export function hashToken(raw: string): string {
-  return createHash("sha256").update(raw).digest("hex");
-}
-
 export type MemberRow = {
   id: string;
   displayName: string;
@@ -345,9 +340,7 @@ export async function getInviteByToken(rawToken: string) {
     .where(eq(invites.tokenHash, hashToken(rawToken)))
     .limit(1);
   if (!invite) return null;
-  if (invite.acceptedAt) return null;
-  if (invite.expiresAt.getTime() <= Date.now()) return null;
-  return invite;
+  return isInviteUsable(invite) ? invite : null;
 }
 
 // ─── Ticket detail ──────────────────────────────────────────────────────────

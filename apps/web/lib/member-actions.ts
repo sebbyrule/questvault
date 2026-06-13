@@ -9,20 +9,23 @@ import { randomBytes } from "node:crypto";
 import { db, eq, and, isNull, gt } from "@questvault/db";
 import { users, invites } from "@questvault/db/schema";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { requireAdmin } from "./authz";
 import { hashPassword } from "./password";
-import { hashToken, getInviteByToken } from "./queries";
+import { getInviteByToken } from "./queries";
+import {
+  hashToken,
+  inviteSchema,
+  acceptSchema,
+  roleSchema,
+  isSelfLockout,
+  isSelfDeactivate,
+  type InviteInput,
+  type AcceptInput,
+} from "./auth-rules";
 
-const ROLES = ["owner", "admin", "member", "viewer"] as const;
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-const inviteSchema = z.object({
-  email: z.string().email("Enter a valid email"),
-  role: z.enum(ROLES),
-});
-
-export type InviteInput = z.infer<typeof inviteSchema>;
+export type { InviteInput, AcceptInput };
 
 /**
  * Create a one-time invite. Returns the RAW token (caller builds the URL); only
@@ -65,14 +68,6 @@ export async function createInvite(input: InviteInput) {
   return { ok: true as const, token };
 }
 
-const acceptSchema = z.object({
-  token: z.string().min(1),
-  displayName: z.string().trim().min(1, "Name is required").max(80),
-  password: z.string().min(8, "Password must be at least 8 characters").max(200),
-});
-
-export type AcceptInput = z.infer<typeof acceptSchema>;
-
 /** Accept an invite: create the user with the invite's email + role, sign-in is the caller's job. */
 export async function acceptInvite(input: AcceptInput) {
   const parsed = acceptSchema.safeParse(input);
@@ -98,8 +93,6 @@ export async function acceptInvite(input: AcceptInput) {
   return { ok: true as const, email: invite.email };
 }
 
-const roleSchema = z.enum(ROLES);
-
 export async function updateUserRole(userId: string, role: string) {
   const admin = await requireAdmin();
   if (!admin) return { ok: false as const, error: "Forbidden" };
@@ -108,7 +101,7 @@ export async function updateUserRole(userId: string, role: string) {
   if (!parsed.success) return { ok: false as const, error: "Invalid role" };
 
   // Self-lockout guard: an admin cannot demote themselves out of admin/owner.
-  if (userId === admin.id && parsed.data !== "admin" && parsed.data !== "owner") {
+  if (isSelfLockout(admin.id, userId, parsed.data)) {
     return { ok: false as const, error: "You can't remove your own admin role." };
   }
 
@@ -121,7 +114,7 @@ export async function setUserActive(userId: string, active: boolean) {
   const admin = await requireAdmin();
   if (!admin) return { ok: false as const, error: "Forbidden" };
 
-  if (userId === admin.id && !active) {
+  if (isSelfDeactivate(admin.id, userId) && !active) {
     return { ok: false as const, error: "You can't deactivate your own account." };
   }
 
