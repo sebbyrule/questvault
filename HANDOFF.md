@@ -20,19 +20,17 @@ Turborepo.
 
 ## 2. Current state (as of this handoff)
 
-- Branch `main`, latest commit `87f2b70`, pushed to `origin` (github `sebbyrule/questvault`).
-- `pnpm typecheck` → **9/9 green**. `pnpm --filter @questvault/ai test` and
-  `@questvault/gamification test` green. Web production build clean.
-- `pnpm test` (repo-wide) is **not** fully green: `@questvault/mcp-server` declares
-  a `test` script but has **no test files**, so vitest exits 1. Pre-existing; not
-  yet addressed (see §8).
-- **Since the previous handoff** three features landed on `main` (details in §4):
+- Branch `main`, latest feature commit `0c2d7c7` (test foundation), pushed to `origin` (github `sebbyrule/questvault`).
+- `pnpm typecheck` → **9/9 green**. `pnpm test` → **green repo-wide** (gamification 22,
+  web 13, ai 2; mcp-server runs `--passWithNoTests`). Web production build clean.
+- **Since the previous handoff** three features + a test pass landed on `main` (§4):
   the **gamification XP loop** (`7f04f12`) — ticket actions award XP for real —
   **first-run admin registration** (`e299c6f`) — real sign-up with hashed
-  passwords — and **team member management** (`87f2b70`) — invite links, workspace
-  roles, deactivation. **DB now has 6 migrations** (0004 = `users.password_hash` +
-  `role`; 0005 = `invites` table + `users.is_active`); `apps/web` gained a
-  `bcryptjs` dependency, so re-run `pnpm install` and `pnpm db:migrate`.
+  passwords — **team member management** (`87f2b70`) — invite links, workspace
+  roles, deactivation — and a **test foundation** (greened the suite + unit-tested
+  the auth/XP decision logic). **DB now has 6 migrations** (0004 = `users.password_hash`
+  + `role`; 0005 = `invites` table + `users.is_active`); `apps/web` gained
+  `bcryptjs` + `vitest`, so re-run `pnpm install` and `pnpm db:migrate`.
 - Dev servers are currently **stopped**. Docker (Postgres/Redis) may still be up.
 
 ## 3. Architecture map
@@ -212,6 +210,7 @@ pnpm install
 pnpm db:migrate && pnpm db:seed            # 6 migrations; seeds 7 tickets, 3 users (+agent), alice=admin
 pnpm dev                                    # web:3002, api:3001, mcp:3003
 pnpm typecheck                              # 9/9 green
+pnpm test                                   # green (gamification 22, web 13, ai 2)
 ```
 - **MCP:** `curl localhost:3003/health`; drive tools with an MCP SDK client +
   `Authorization: Bearer dev_mcp_secret` (see README "Connecting an MCP agent").
@@ -248,10 +247,16 @@ pnpm typecheck                              # 9/9 green
 - **Dev-token → users.id:** the Express API's dev token sets `userId = dev:<email>`
   (not a UUID). Web auth resolves a real UUID; the coach/MCP attribute writes to the
   agent user. Don't assume the Express `req.auth.userId` is a real `users` row.
-- **`pnpm test`** fails on mcp-server ("No test files"); add `--passWithNoTests` or a
-  test if you want the repo suite green.
-- After live verification, **test data was cleaned up** (back to 1 project / 7
-  tickets / 0 templates; settings reset to defaults).
+- **Testing convention = pure unit tests, no DB.** Vitest runs config-free with
+  colocated `*.test.ts`; `gamification`, `ai`, and now `apps/web` have a runner.
+  `@questvault/db`'s client connects **on import** (throws without `DATABASE_URL`),
+  so web tests must import only DB-free modules (`lib/roles.ts`, `lib/auth-rules.ts`,
+  `@questvault/gamification`) — never `lib/xp.ts`/`queries.ts`/actions (those pull
+  the db client). Pure decision-logic was extracted into those DB-free modules to
+  keep it testable; the DB I/O glue is covered by manual/preview verification.
+  `mcp-server` runs `--passWithNoTests` (no real test yet). No test-DB harness exists.
+- After live verification, **test data was cleaned up** (re-seeded to baseline:
+  1 project / 7 tickets / 0 templates; alice=admin; settings reset to defaults).
 
 ## 9. What's next (not done)
 
@@ -270,8 +275,11 @@ pnpm typecheck                              # 9/9 green
   and forced JWT revocation on deactivation (today it takes effect on next nav).
 - **Phase 5:** sprint analytics, GitHub/Slack integrations, billing/SSO/SCIM,
   mobile, perf.
-- **Housekeeping:** mcp-server test script (repo `pnpm test` still red); no unit
-  tests yet for `lib/xp.ts` or the auth/member actions.
+- **Testing remainder:** pure decision-logic is unit-tested (gamification streak/
+  rules, `auth-rules`, `roles`), but the **DB I/O paths are not** — no integration
+  harness for `awardXp`/invite-accept/`authorize` (would need a test DB + `auth()`/
+  `next/cache` mocks). `mcp-server` has no real test (`--passWithNoTests`). No CI
+  wiring or coverage thresholds yet.
 
 ## 10. Working agreements observed with the owner
 
