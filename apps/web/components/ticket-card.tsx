@@ -8,6 +8,7 @@ import { clsx } from "clsx";
 import { Avatar, PriorityBadge, LabelChip } from "./ui";
 import { BOARD_COLUMNS, type TicketStatus } from "@/lib/format";
 import { moveTicket } from "@/lib/actions";
+import { showXpToast } from "./xp-toast";
 import type { BoardTicket } from "@/lib/queries";
 
 export function TicketCard({ ticket }: { ticket: BoardTicket }) {
@@ -19,8 +20,9 @@ export function TicketCard({ ticket }: { ticket: BoardTicket }) {
 
   const move = (status: TicketStatus | null) => {
     if (!status) return;
-    startTransition(() => {
-      void moveTicket(ticket.id, status);
+    startTransition(async () => {
+      const res = await moveTicket(ticket.id, status);
+      if (res.ok) showXpToast(res);
     });
   };
 

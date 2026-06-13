@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CoachPanel } from "@/components/coach-panel";
+import { XpToaster } from "@/components/xp-toast";
 
 export default async function AppLayout({
   children,
@@ -27,6 +28,7 @@ export default async function AppLayout({
       <AppSidebar user={user} />
       <main className="flex-1 overflow-y-auto">{children}</main>
       <CoachPanel />
+      <XpToaster />
     </div>
   );
 }

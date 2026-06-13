@@ -4,7 +4,6 @@ import {
   text,
   integer,
   timestamp,
-  jsonb,
   boolean,
   pgEnum,
   index,
@@ -13,6 +12,9 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { users } from "./users";
 import { projects } from "./projects";
+// Custom jsonb that serializes exactly once (see ./json). The built-in jsonb +
+// postgres-js double-encode, storing the value as a JSON string. (§8 gotcha.)
+import { jsonb } from "./json";
 
 // ─── XP Events ────────────────────────────────────────────────────────────────
 
@@ -40,7 +42,7 @@ export const xpEvents = pgTable(
     entityId: uuid("entity_id"),
     entityType: text("entity_type"), // "ticket" | "sprint" | "pr"
     // Streak multiplier, quality flags, anti-gaming notes
-    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    metadata: jsonb<Record<string, unknown>>("metadata"),
     // Set to true if held pending anti-gaming review
     isPending: boolean("is_pending").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })

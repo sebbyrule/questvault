@@ -21,6 +21,17 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser } from "./queries";
 import { uniqueProjectSlug } from "./slug";
+import { awardXp, type AwardXpOpts, type AwardResult } from "./xp";
+
+/** Award XP without ever letting a gamification failure break the mutation. */
+async function tryAward(opts: AwardXpOpts): Promise<AwardResult> {
+  try {
+    return await awardXp(opts);
+  } catch (err) {
+    console.error("[xp] award failed:", err);
+    return { xpAwarded: 0, badges: [] };
+  }
+}
 
 /** Revalidate every page a ticket mutation can affect. */
 function revalidateTicket(ticketId: string) {
@@ -41,17 +52,43 @@ export async function moveTicket(ticketId: string, status: string) {
   const parsed = statusSchema.safeParse(status);
   if (!parsed.success) return { ok: false, error: "Invalid status" };
 
-  const set: Record<string, unknown> = {
-    status: parsed.data,
-    updatedAt: new Date(),
-  };
-  set.closedAt = parsed.data === "done" ? new Date() : null;
+  const current = await db.query.tickets.findFirst({
+    where: eq(tickets.id, ticketId),
+    columns: { status: true, priority: true, assigneeId: true, createdAt: true },
+  });
+  if (!current) return { ok: false, error: "Ticket not found" };
+
+  const now = new Date();
+  const set: Record<string, unknown> = { status: parsed.data, updatedAt: now };
+  set.closedAt = parsed.data === "done" ? now : null;
 
   await db.update(tickets).set(set).where(eq(tickets.id, ticketId));
 
+  // Award ticket_closed on the transition INTO done (credit the assignee if
+  // any, else the actor performing the move).
+  let award: AwardResult = { xpAwarded: 0, badges: [] };
+  if (parsed.data === "done" && current.status !== "done") {
+    const actor = await getCurrentUser();
+    const earnerId = current.assigneeId ?? actor?.id;
+    if (earnerId) {
+      award = await tryAward({
+        userId: earnerId,
+        action: "ticket_closed",
+        input: {
+          ticketId,
+          priority: current.priority,
+          openedAt: current.createdAt,
+          closedAt: now,
+        },
+        entityId: ticketId,
+        entityType: "ticket",
+      });
+    }
+  }
+
   revalidatePath("/board");
   revalidatePath("/dashboard");
-  return { ok: true };
+  return { ok: true, ...award };
 }
 
 const createSchema = z.object({
@@ -78,19 +115,40 @@ export async function createTicket(input: z.input<typeof createSchema>) {
     .where(eq(tickets.projectId, projectId));
   const number = (row?.maxNumber ?? 0) + 1;
 
-  await db.insert(tickets).values({
-    number,
-    projectId,
-    reporterId,
-    title,
-    description,
-    priority,
-    status: "backlog",
-  });
+  const [created] = await db
+    .insert(tickets)
+    .values({
+      number,
+      projectId,
+      reporterId,
+      title,
+      description,
+      priority,
+      status: "backlog",
+    })
+    .returning({ id: tickets.id });
+
+  // Award ticket_created XP to the reporter. Plain creates fail the rule's
+  // quality gate (no assignee) → 0 XP by design, but the first-ticket badge
+  // still unlocks here.
+  const award = created
+    ? await tryAward({
+        userId: reporterId,
+        action: "ticket_created",
+        input: {
+          ticketId: created.id,
+          title,
+          description: description ?? null,
+          assigneeId: null,
+        },
+        entityId: created.id,
+        entityType: "ticket",
+      })
+    : { xpAwarded: 0, badges: [] };
 
   revalidatePath("/board");
   revalidatePath("/dashboard");
-  return { ok: true };
+  return { ok: true, ...award };
 }
 
 // ─── Ticket detail editing ────────────────────────────────────────────────────
@@ -253,8 +311,48 @@ export async function updateTicketDetails(ticketId: string, patch: EditTicketInp
     );
   });
 
+  // ── XP awards (best-effort, after the core update has committed) ──────────
+  let xpAwarded = 0;
+  const earnedBadges: AwardResult["badges"] = [];
+
+  // Closed: transition INTO done. Credit the (effective) assignee, else actor.
+  if (input.status === "done" && current.status !== "done") {
+    const effectiveAssignee =
+      input.assigneeId !== undefined ? input.assigneeId : current.assigneeId;
+    const earnerId = effectiveAssignee ?? actor?.id;
+    if (earnerId) {
+      const a = await tryAward({
+        userId: earnerId,
+        action: "ticket_closed",
+        input: {
+          ticketId,
+          priority: input.priority ?? current.priority,
+          openedAt: current.createdAt,
+          closedAt: new Date(),
+        },
+        entityId: ticketId,
+        entityType: "ticket",
+      });
+      xpAwarded += a.xpAwarded;
+      earnedBadges.push(...a.badges);
+    }
+  }
+
+  // PR linked: prUrl goes from empty → a url. Credit the actor.
+  if (input.prUrl && !current.prUrl && actor?.id) {
+    const a = await tryAward({
+      userId: actor.id,
+      action: "pr_linked",
+      input: { ticketId, prUrl: input.prUrl },
+      entityId: ticketId,
+      entityType: "pr",
+    });
+    xpAwarded += a.xpAwarded;
+    earnedBadges.push(...a.badges);
+  }
+
   revalidateTicket(ticketId);
-  return { ok: true };
+  return { ok: true, xpAwarded, badges: earnedBadges };
 }
 
 // ─── Projects ─────────────────────────────────────────────────────────────────

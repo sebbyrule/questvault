@@ -21,6 +21,8 @@ async function seed() {
 
   console.log("🌱 Seeding database…");
 
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
   // ── Wipe existing dev data (order matters for FK constraints) ──────────────
   await db.delete(ticketLabels);
   await db.delete(userBadges);
@@ -43,6 +45,9 @@ async function seed() {
         displayName: "Alice Chen",
         xpTotal: 340,
         streakDays: 5,
+        // Active yesterday so today's first action extends the streak (rather
+        // than resetting it — a null last_active_at reads as "no prior day").
+        lastActiveAt: yesterday,
       },
       {
         id: "00000000-0000-0000-0000-000000000002",
@@ -50,6 +55,7 @@ async function seed() {
         displayName: "Bob Torres",
         xpTotal: 120,
         streakDays: 2,
+        lastActiveAt: yesterday,
       },
       {
         id: "00000000-0000-0000-0000-000000000003",
