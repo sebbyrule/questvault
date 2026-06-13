@@ -18,7 +18,14 @@ through environment variables alone.
   between columns with one click; create tickets from a modal. Cards show priority,
   labels, story points, and assignee avatars.
 - **Dashboard** — ticket counts by status, sprint progress with countdown, and an XP
-  leaderboard (levels, streaks, badge counts) computed from the gamification rules.
+  leaderboard (levels, streaks, badge counts).
+- **Gamification** — ticket actions earn XP for real: creating, closing, and
+  PR-linking tickets run the rules engine (quality gates, daily caps, streak
+  multipliers), write `xp_events`, advance the daily streak, and unlock badges —
+  with a "+N XP earned" toast. The dashboard leaderboard reflects live totals.
+- **Accounts** — on first launch (empty database) the app shows a **Create admin
+  account** form; the first user becomes the workspace admin with a bcrypt-hashed
+  password. After that, registration closes and visitors get the login screen.
 - **Projects** — project cards with completion progress and member/ticket counts.
 - **AI Coach** — a streaming chat panel grounded in your real tickets and sprint
   that can also **take actions** via the shared tool registry (create/update/close
@@ -128,9 +135,15 @@ The AI coach is the **✦** button at the bottom-right of any app page.
 Seeded dev account (also printed by `pnpm db:seed`):
 
 ```
-Email:    alice@example.com   (any valid email works)
+Email:    alice@example.com   (or bob@ / carol@ — any seeded email)
 Password: devpass
 ```
+
+Seeded users have no stored password, so in **non-production** they sign in with
+the literal `devpass`. A **registered** user (created via the first-run sign-up
+form, or any account with a real password) authenticates against its bcrypt hash
+instead. If you start from an empty database, `/auth/login` redirects to
+`/auth/register` so you can create the admin account.
 
 The same identity is a dev API token: `Authorization: Bearer dev:alice@example.com`.
 
@@ -249,11 +262,14 @@ Phases mirror the [SDD](QuestVault_SDD.docx). Status reflects the current codeba
 - [x] REST API with dev-token auth
 - [x] Full ticket CRUD in the UI (edit, comments, history, labels, assignees)
 - [x] Real auth (Auth.js handlers mounted; route protection; session-attributed writes)
+- [x] First-run admin registration + bcrypt-hashed credentials (dev `devpass` fallback)
 
 ### Phase 2 — Gamification  ·  🟡 in progress
 - [x] XP rules engine, levels, badges (logic in `packages/gamification`)
 - [x] Dashboard leaderboard (XP, levels, streaks, badges)
-- [ ] Event-driven XP awards via a background worker (currently display-only)
+- [x] XP awarded on ticket actions (create / close / PR-link) — events, streaks,
+  badges, and a toast, wired synchronously in the web server actions
+- [ ] Move awards to a background event-bus worker (currently synchronous)
 - [ ] Anti-gaming guards wired to the event bus
 - [ ] Real-time WebSocket updates (ticket/XP/notifications)
 

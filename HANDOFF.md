@@ -20,22 +20,28 @@ Turborepo.
 
 ## 2. Current state (as of this handoff)
 
-- Branch `main`, latest commit `a46ee52`, pushed to `origin` (github `sebbyrule/questvault`).
+- Branch `main`, latest commit `e299c6f`, pushed to `origin` (github `sebbyrule/questvault`).
 - `pnpm typecheck` → **9/9 green**. `pnpm --filter @questvault/ai test` and
   `@questvault/gamification test` green. Web production build clean.
 - `pnpm test` (repo-wide) is **not** fully green: `@questvault/mcp-server` declares
   a `test` script but has **no test files**, so vitest exits 1. Pre-existing; not
   yet addressed (see §8).
+- **Since the previous handoff** two features landed on `main` (details in §4):
+  the **gamification XP loop** (`7f04f12`) — ticket actions now award XP for real —
+  and **first-run admin registration** (`e299c6f`) — real sign-up with hashed
+  passwords. **DB now has 5 migrations** (0004 adds `users.password_hash` + `role`);
+  `apps/web` gained a `bcryptjs` dependency, so re-run `pnpm install`.
 - Dev servers are currently **stopped**. Docker (Postgres/Redis) may still be up.
 
 ## 3. Architecture map
 
 ```
 apps/web            Next.js app — pages: /board, /board/[ticketId], /dashboard,
-                    /projects, /templates, /settings, /auth/login; API route
-                    /api/auth/[...nextauth] and BFF /api/coach; middleware.ts
-                    (route protection). Server actions in lib/*-actions.ts,
-                    reads in lib/queries.ts.
+                    /projects, /templates, /settings, /auth/login, /auth/register;
+                    API route /api/auth/[...nextauth] and BFF /api/coach;
+                    middleware.ts (route protection). Server actions in
+                    lib/*-actions.ts, reads in lib/queries.ts. lib/xp.ts bridges
+                    ticket actions → gamification; lib/password.ts = bcrypt (Node only).
 packages/db         Drizzle schema (one file per domain under src/schema/),
                     migrations, seed, client. Re-exports drizzle operators so app
                     code never imports drizzle-orm directly. getAppSettings /
@@ -109,6 +115,35 @@ Two threads of work, both already on `main`:
   bug** with a custom jsonb column type (`packages/db/src/schema/json.ts`) — applied
   to `project_templates.definition` and `app_settings.enabled_tools`.
 
+**Phase 2 (gamification) + auth, since this handoff:**
+- `7f04f12` **Gamification XP loop (Phase 2 core).** The tested rules engine was
+  imported nowhere; dashboard XP was static seed data. New
+  `apps/web/lib/xp.ts` (`awardXp`) bridges `@questvault/gamification` to the DB:
+  runs the matching rule (quality gate → daily-cap guards → streak multiplier),
+  writes an `xp_event`, advances the UTC-day streak, unlocks the seeded badges
+  idempotently, and bumps `users.xp_total` — all in one transaction, best-effort
+  (never breaks the mutation). Wired into the server actions in `lib/actions.ts`:
+  `createTicket` (`ticket_created` + first-ticket badge), `moveTicket` /
+  `updateTicketDetails` (transition into *done* → `ticket_closed`, credited to
+  assignee else actor), and PR-url first-set → `pr_linked`. Added a `<XpToaster>`
+  (`components/xp-toast.tsx`) for a "+N XP earned" toast. **Applied the custom
+  `jsonb` type to `xp_events.metadata`** (the §8 gotcha — no DDL drift). Seed sets
+  `last_active_at = yesterday` for streaked users so the first action *extends*
+  the streak rather than resetting it. Awards happen **only in the web
+  server-action layer** — coach/MCP changes (via `@questvault/tools`) do not mint XP.
+- `e299c6f` **First-run admin registration.** Migration `0004` adds
+  `users.password_hash` (nullable) + `users.role` (`userRoleEnum`, default
+  `member`). New `apps/web/lib/password.ts` (`bcryptjs`, cost 12, **Node-runtime
+  only**). `adminExists()` / `getSessionRole()` in `lib/queries.ts` (reuse the
+  leaderboard's `ne(email, "agent@questvault.internal")` exclusion). `registerUser`
+  action (`lib/auth-actions.ts`) — first-run gated, hashes the password, creates the
+  first user with role `admin`. `authorize()` (`lib/auth.ts`) now verifies the
+  bcrypt hash for users that have one (all envs) and keeps the `devpass` find-or-create
+  fallback for hash-less rows (non-prod). `/auth/login` + `/auth/register` are server
+  wrappers that redirect on `adminExists()`; the login form moved to
+  `components/auth/login-form.tsx`, with a new `register-form.tsx`. Sidebar shows an
+  **ADMIN** pill.
+
 ## 5. Key decisions & conventions
 
 - **Web data layer = server actions + direct `@questvault/db`** (not the Express
@@ -138,13 +173,19 @@ Two threads of work, both already on `main`:
   alice/bob/carol = `…001/002/003`; agent user = `…000`. Dev login
   `alice@example.com` / `devpass`; dev API token `Bearer dev:alice@example.com`;
   MCP bearer `dev_mcp_secret`.
+- **Auth/registration:** seeded users have **no** `password_hash` → they use the
+  `devpass` dev fallback (non-prod). The credentials provider verifies a bcrypt
+  hash for any user that has one (all envs). To exercise the first-run **register**
+  flow you need an empty users table (`TRUNCATE users CASCADE;` then visit
+  `/auth/login` → it redirects to `/auth/register`); re-seeding closes registration
+  again. The first registered user gets `role = "admin"`.
 
 ## 7. How to run & verify
 
 ```bash
 docker compose up -d                       # Postgres(:5433 locally)+Redis
 pnpm install
-pnpm db:migrate && pnpm db:seed            # 4 migrations; seeds 7 tickets, agent user
+pnpm db:migrate && pnpm db:seed            # 5 migrations; seeds 7 tickets, 3 users + agent
 pnpm dev                                    # web:3002, api:3001, mcp:3003
 pnpm typecheck                              # 9/9 green
 ```
@@ -162,9 +203,9 @@ pnpm typecheck                              # 9/9 green
 
 - **jsonb double-encoding:** drizzle's built-in `jsonb` + postgres-js both
   stringify → values stored as JSON *strings*. Use the custom `jsonb` from
-  `packages/db/src/schema/json.ts` for any new jsonb column (already applied to
-  `definition` and `enabled_tools`; `xp_events.metadata` still uses built-in jsonb
-  and would need the same fix if/when it's written).
+  `packages/db/src/schema/json.ts` for any new jsonb column (applied to
+  `definition`, `enabled_tools`, and now `xp_events.metadata`). No remaining
+  built-in jsonb columns — but keep using the custom type for new ones.
 - **Web tsconfig target:** spreading a `Set` (`[...set]`) errors — use
   `Array.from(set)`.
 - **Adding a workspace dep / schema change requires restarting the running Next dev
@@ -182,8 +223,12 @@ pnpm typecheck                              # 9/9 green
 
 - **Phase 4 remainder:** scoped per-agent MCP tokens (replace the shared
   `MCP_AGENT_SECRET`; likely an `agent_tokens` table) and webhook callbacks.
-- **Phase 2:** event-bus worker for XP awards (currently display-only),
-  anti-gaming guards wired to the bus, real-time WebSocket updates.
+- **Phase 2:** XP is now awarded synchronously in the web server actions
+  (`lib/xp.ts`). Remaining: move awarding to an event-bus worker
+  (`services/workers`) so coach/MCP changes also mint XP; wire anti-gaming guards
+  (the velocity check in `constants.ts` is still unwired); real-time WebSocket
+  updates. Also: `sprint_completed` / `review_submitted` rules exist but have no
+  triggering surface yet.
 - **Phase 3:** proactive coach nudges (scheduled `services/ai-coach`), semantic
   ticket search (pgvector HNSW index already exists; `USE_EMBEDDINGS`).
 - **Phase 5:** sprint analytics, GitHub/Slack integrations, billing/SSO/SCIM,
