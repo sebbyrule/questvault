@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tsx watch src/http.ts",
     "start": "tsx src/http.ts",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
