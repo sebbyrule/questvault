@@ -11,8 +11,12 @@ import "./load-env.js"; // must run before ./client.js reads DATABASE_URL
 import { db } from "./client.js";
 import {
   users, projects, projectMembers, sprints,
-  tickets, labels, ticketLabels, badges, userBadges,
+  tickets, labels, ticketLabels, badges, userBadges, agentTokens,
 } from "./schema/index.js";
+import { hashAgentToken } from "./agents.js";
+
+// A fixed example read-only agent token so dev can try scoped MCP access.
+const EXAMPLE_AGENT_TOKEN = "qv_agent_example_readonly";
 
 async function seed() {
   if (process.env.NODE_ENV === "production") {
@@ -24,6 +28,7 @@ async function seed() {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   // ── Wipe existing dev data (order matters for FK constraints) ──────────────
+  await db.delete(agentTokens);
   await db.delete(ticketLabels);
   await db.delete(userBadges);
   await db.delete(tickets);
@@ -271,6 +276,18 @@ async function seed() {
   ]);
 
   console.log("  ✓ Badges seeded; alice has 2, bob has 1");
+
+  // ── Example agent token (read-only) ────────────────────────────────────────
+  const agentUser = "00000000-0000-0000-0000-000000000000";
+  await db.insert(agentTokens).values({
+    name: "Example Agent (read-only)",
+    tokenHash: hashAgentToken(EXAMPLE_AGENT_TOKEN),
+    scopes: ["list_tickets", "get_ticket", "search_tickets"],
+    createdBy: alice!.id,
+    reporterId: agentUser,
+  });
+  console.log("  ✓ Example agent token seeded (read-only)");
+
   console.log("\n✅ Seed complete!");
   console.log("\nDev login credentials:");
   console.log("  Email:    alice@example.com  (or any email)");
@@ -280,6 +297,9 @@ async function seed() {
   console.log("\nTest the API:");
   console.log('  curl -H "Authorization: Bearer dev:alice@example.com" \\');
   console.log('       http://localhost:3001/api/v1/projects/00000000-0000-0000-0000-000000000010/tickets');
+  console.log("\nMCP tokens:");
+  console.log(`  Shared (all tools):  Bearer ${process.env.MCP_AGENT_SECRET ?? "dev_mcp_secret"}`);
+  console.log(`  Example (read-only): Bearer ${EXAMPLE_AGENT_TOKEN}`);
 
   process.exit(0);
 }

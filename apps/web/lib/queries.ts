@@ -14,6 +14,7 @@ import {
   projectMembers,
   userBadges,
   invites,
+  agentTokens,
 } from "@questvault/db/schema";
 import { auth } from "./auth";
 import { hashToken, isInviteUsable } from "./auth-rules";
@@ -329,6 +330,30 @@ export async function listPendingInvites(): Promise<PendingInvite[]> {
     expiresAt: r.expiresAt,
     invitedBy: r.inviterName,
   }));
+}
+
+export type AgentTokenRow = {
+  id: string;
+  name: string;
+  scopes: string[];
+  lastUsedAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+};
+
+/** All agent tokens for the admin Agents page (newest first; no hashes). */
+export async function listAgentTokens(): Promise<AgentTokenRow[]> {
+  return db
+    .select({
+      id: agentTokens.id,
+      name: agentTokens.name,
+      scopes: agentTokens.scopes,
+      lastUsedAt: agentTokens.lastUsedAt,
+      revokedAt: agentTokens.revokedAt,
+      createdAt: agentTokens.createdAt,
+    })
+    .from(agentTokens)
+    .orderBy(desc(agentTokens.createdAt));
 }
 
 /** Resolve a raw invite token to a valid (pending, unexpired) invite, else null. */

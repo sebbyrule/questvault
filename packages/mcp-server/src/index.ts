@@ -50,13 +50,16 @@ async function audit(
 // ─── Server factory ────────────────────────────────────────────────────────────
 
 /**
- * Build an McpServer with every registry tool registered for the given context.
- * In stateless HTTP serving a fresh server is created per request.
+ * Build an McpServer with the registry tools registered for the given context.
+ * In stateless HTTP serving a fresh server is created per request. When
+ * `allowed` is given, only those tool names are registered (per-agent scopes);
+ * a disallowed tool is simply absent → "method not found".
  */
-export function createServer(ctx: ToolContext): McpServer {
+export function createServer(ctx: ToolContext, allowed?: Set<string>): McpServer {
   const server = new McpServer({ name: "questvault", version: "0.1.0" });
 
-  for (const tool of allTools) {
+  const tools = allowed ? allTools.filter((t) => allowed.has(t.name)) : allTools;
+  for (const tool of tools) {
     server.tool(
       tool.name,
       tool.description,
