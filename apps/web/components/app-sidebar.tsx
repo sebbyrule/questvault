@@ -19,6 +19,7 @@ const NAV = [
 const ADMIN_NAV = [
   { href: "/members", label: "Members", icon: "♟" },
   { href: "/agents", label: "Agents", icon: "✦" },
+  { href: "/webhooks", label: "Webhooks", icon: "⇄" },
   { href: "/settings", label: "Settings", icon: "⚙" },
 ];
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { tickets, comments } from "@questvault/db/schema";
-import { eq } from "@questvault/db";
+import { eq, dispatchWebhooks } from "@questvault/db";
 import type { ToolDefinition } from "../types";
 
 const schema = z.object({
@@ -26,6 +26,11 @@ export const addCommentTool: ToolDefinition = {
       .insert(comments)
       .values({ ticketId: input.ticket_id, agentId, body: input.body })
       .returning();
+
+    await dispatchWebhooks(db, {
+      type: "comment.created",
+      data: { id: created?.id, ticketId: input.ticket_id, agentId, body: input.body },
+    });
 
     return created;
   },

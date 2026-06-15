@@ -5,7 +5,7 @@ import {
   ticketStatusEnum,
   ticketPriorityEnum,
 } from "@questvault/db/schema";
-import { eq } from "@questvault/db";
+import { eq, dispatchWebhooks } from "@questvault/db";
 import type { ToolDefinition } from "../types";
 
 const schema = z.object({
@@ -108,6 +108,17 @@ export const updateTicketTool: ToolDefinition = {
       );
       return row;
     });
+
+    if (updated) {
+      const data = {
+        id: updated.id, number: updated.number, title: updated.title,
+        projectId: updated.projectId, status: updated.status, priority: updated.priority,
+      };
+      await dispatchWebhooks(db, { type: "ticket.updated", data });
+      if (updated.status === "done" && current.status !== "done") {
+        await dispatchWebhooks(db, { type: "ticket.closed", data });
+      }
+    }
 
     return { ticketId: input.ticket_id, updated: true, changes, ticket: updated };
   },

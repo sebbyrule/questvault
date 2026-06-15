@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { tickets, ticketLabels, ticketPriorityEnum } from "@questvault/db/schema";
-import { eq, max } from "@questvault/db";
+import { eq, max, dispatchWebhooks } from "@questvault/db";
 import type { ToolDefinition } from "../types";
 
 const schema = z.object({
@@ -54,6 +54,14 @@ export const createTicketTool: ToolDefinition = {
           .values(input.labels.map((labelId) => ({ ticketId: row.id, labelId })));
       }
       return row;
+    });
+
+    await dispatchWebhooks(db, {
+      type: "ticket.created",
+      data: {
+        id: created.id, number: created.number, title: created.title,
+        projectId: created.projectId, status: created.status, priority: created.priority,
+      },
     });
 
     return created;

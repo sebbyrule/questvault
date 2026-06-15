@@ -4,6 +4,7 @@
 export * from "./users";
 export * from "./invites";
 export * from "./agents";
+export * from "./webhooks";
 export * from "./projects";
 export * from "./tickets";
 export * from "./gamification";

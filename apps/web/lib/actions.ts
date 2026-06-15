@@ -5,7 +5,7 @@
  * write through @questvault/db, then revalidate the affected pages. Writes are
  * attributed to the Auth.js session user via getCurrentUser().
  */
-import { db, eq, and, max, inArray } from "@questvault/db";
+import { db, eq, and, max, inArray, dispatchWebhooks, type WebhookEvent } from "@questvault/db";
 import {
   tickets,
   comments,
@@ -34,6 +34,15 @@ async function tryAward(opts: AwardXpOpts): Promise<AwardResult> {
   }
 }
 
+/** Fire webhooks best-effort; never let a delivery failure break the mutation. */
+async function tryDispatch(event: WebhookEvent): Promise<void> {
+  try {
+    await dispatchWebhooks(db, event);
+  } catch (err) {
+    console.error("[webhooks] dispatch failed:", err);
+  }
+}
+
 /** Revalidate every page a ticket mutation can affect. */
 function revalidateTicket(ticketId: string) {
   revalidatePath(`/board/${ticketId}`);
@@ -55,7 +64,10 @@ export async function moveTicket(ticketId: string, status: string) {
 
   const current = await db.query.tickets.findFirst({
     where: eq(tickets.id, ticketId),
-    columns: { status: true, priority: true, assigneeId: true, createdAt: true },
+    columns: {
+      number: true, title: true, projectId: true,
+      status: true, priority: true, assigneeId: true, createdAt: true,
+    },
   });
   if (!current) return { ok: false, error: "Ticket not found" };
 
@@ -85,6 +97,15 @@ export async function moveTicket(ticketId: string, status: string) {
         entityType: "ticket",
       });
     }
+  }
+
+  const hookData = {
+    id: ticketId, number: current.number, title: current.title,
+    projectId: current.projectId, status: parsed.data, priority: current.priority,
+  };
+  await tryDispatch({ type: "ticket.updated", data: hookData });
+  if (parsed.data === "done" && current.status !== "done") {
+    await tryDispatch({ type: "ticket.closed", data: hookData });
   }
 
   revalidatePath("/board");
@@ -149,6 +170,13 @@ export async function createTicket(input: z.input<typeof createSchema>) {
 
   // Best-effort semantic-search embedding (no-op when embeddings are disabled).
   if (created) await embedTicketText(created.id, title, description ?? null);
+
+  if (created) {
+    await tryDispatch({
+      type: "ticket.created",
+      data: { id: created.id, number, title, status: "backlog", priority, projectId },
+    });
+  }
 
   revalidatePath("/board");
   revalidatePath("/dashboard");
@@ -374,6 +402,17 @@ export async function updateTicketDetails(ticketId: string, patch: EditTicketInp
     );
   }
 
+  const hookData = {
+    id: ticketId, number: current.number, projectId: current.projectId,
+    title: input.title ?? current.title,
+    status: input.status ?? current.status,
+    priority: input.priority ?? current.priority,
+  };
+  await tryDispatch({ type: "ticket.updated", data: hookData });
+  if (input.status === "done" && current.status !== "done") {
+    await tryDispatch({ type: "ticket.closed", data: hookData });
+  }
+
   revalidateTicket(ticketId);
   return { ok: true, xpAwarded, badges: earnedBadges };
 }
@@ -445,11 +484,17 @@ export async function addComment(ticketId: string, body: string) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "No user to attribute the comment to" };
 
-  await db.insert(comments).values({
-    ticketId,
-    authorId: user.id,
-    body: parsed.data.body,
-  });
+  const [created] = await db
+    .insert(comments)
+    .values({ ticketId, authorId: user.id, body: parsed.data.body })
+    .returning({ id: comments.id });
+
+  if (created) {
+    await tryDispatch({
+      type: "comment.created",
+      data: { id: created.id, ticketId, authorId: user.id, body: parsed.data.body },
+    });
+  }
 
   revalidateTicket(ticketId);
   return { ok: true };

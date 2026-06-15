@@ -4,6 +4,15 @@ export * from "./schema/index";
 export { getAppSettings, updateAppSettings } from "./settings";
 export { embed, embeddingsEnabled, toVectorLiteral } from "./embeddings";
 export { hashAgentToken, isToolAllowed, resolveAgentToken } from "./agents";
+export {
+  WEBHOOK_EVENTS,
+  signPayload,
+  isEventSubscribed,
+  dispatchWebhooks,
+  dispatchTest,
+  type WebhookEventType,
+  type WebhookEvent,
+} from "./webhooks";
 
 // Re-export drizzle query operators so app code can compose queries without a
 // direct drizzle-orm dependency (AGENT.md: "Never import drizzle directly in

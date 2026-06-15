@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { tickets, comments } from "@questvault/db/schema";
-import { eq } from "@questvault/db";
+import { eq, dispatchWebhooks } from "@questvault/db";
 import type { ToolDefinition } from "../types";
 
 const schema = z.object({
@@ -39,6 +39,11 @@ export const closeTicketTool: ToolDefinition = {
           body: `**Resolution:** ${input.resolution_note}`,
         });
       }
+    });
+
+    await dispatchWebhooks(db, {
+      type: "ticket.closed",
+      data: { id: input.ticket_id, projectId: ticket.projectId, status: "done" },
     });
 
     return { ticketId: input.ticket_id, status: "done", closedAt: now.toISOString() };

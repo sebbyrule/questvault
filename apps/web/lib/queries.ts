@@ -15,6 +15,8 @@ import {
   userBadges,
   invites,
   agentTokens,
+  webhooks,
+  webhookDeliveries,
 } from "@questvault/db/schema";
 import { auth } from "./auth";
 import { hashToken, isInviteUsable } from "./auth-rules";
@@ -354,6 +356,60 @@ export async function listAgentTokens(): Promise<AgentTokenRow[]> {
     })
     .from(agentTokens)
     .orderBy(desc(agentTokens.createdAt));
+}
+
+export type WebhookRow = {
+  id: string;
+  name: string;
+  url: string;
+  secret: string;
+  events: string[];
+  isActive: boolean;
+  createdAt: Date;
+};
+
+/** All webhook subscriptions for the admin page (newest first). */
+export async function listWebhooks(): Promise<WebhookRow[]> {
+  return db
+    .select({
+      id: webhooks.id,
+      name: webhooks.name,
+      url: webhooks.url,
+      secret: webhooks.secret,
+      events: webhooks.events,
+      isActive: webhooks.isActive,
+      createdAt: webhooks.createdAt,
+    })
+    .from(webhooks)
+    .orderBy(desc(webhooks.createdAt));
+}
+
+export type DeliveryRow = {
+  id: string;
+  webhookName: string | null;
+  eventType: string;
+  status: string;
+  responseStatus: number | null;
+  error: string | null;
+  createdAt: Date;
+};
+
+/** Recent webhook deliveries across all hooks (for the admin log view). */
+export async function listRecentDeliveries(limit = 20): Promise<DeliveryRow[]> {
+  return db
+    .select({
+      id: webhookDeliveries.id,
+      webhookName: webhooks.name,
+      eventType: webhookDeliveries.eventType,
+      status: webhookDeliveries.status,
+      responseStatus: webhookDeliveries.responseStatus,
+      error: webhookDeliveries.error,
+      createdAt: webhookDeliveries.createdAt,
+    })
+    .from(webhookDeliveries)
+    .leftJoin(webhooks, eq(webhookDeliveries.webhookId, webhooks.id))
+    .orderBy(desc(webhookDeliveries.createdAt))
+    .limit(limit);
 }
 
 /** Resolve a raw invite token to a valid (pending, unexpired) invite, else null. */
