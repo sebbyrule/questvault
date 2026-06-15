@@ -416,7 +416,7 @@ async function* lmStudioToolLoop(
       }
     }
 
-    const calls = [...callsByIndex.values()].filter((c) => c.name);
+    const calls = Array.from(callsByIndex.values()).filter((c) => c.name);
     if (calls.length === 0) return; // final answer already streamed
 
     convo.push({
@@ -506,7 +506,7 @@ async function* anthropicToolLoop(
       }
     }
 
-    const ordered = [...blocks.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+    const ordered = Array.from(blocks.entries()).sort((a, b) => a[0] - b[0]).map(([, v]) => v);
     const toolUses = ordered.filter((b) => b.type === "tool_use");
     if (toolUses.length === 0) return; // final answer already streamed
 

@@ -15,7 +15,7 @@ import {
   type StreamChunk,
 } from "./client.js";
 import { toToolSpecs } from "./tool-schema.js";
-import { getAppSettings, type Database } from "@questvault/db";
+import { getAppSettings, embed, type Database } from "@questvault/db";
 import { allTools, toolsByName, type ToolContext } from "@questvault/tools";
 import { buildCoachContext } from "./context.js";
 
@@ -75,6 +75,8 @@ ${context}
     agentId: "coach",
     reporterId:
       process.env.MCP_AGENT_REPORTER_ID ?? "00000000-0000-0000-0000-000000000000",
+    // Lets the coach's search_tickets do semantic search (no-op when disabled).
+    embed,
   };
 
   const execute = async (name: string, args: unknown): Promise<unknown> => {

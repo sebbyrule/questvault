@@ -17,12 +17,14 @@
     "db:generate": "turbo run db:generate --filter=@questvault/db",
     "db:migrate": "turbo run db:migrate --filter=@questvault/db",
     "db:seed": "turbo run db:seed --filter=@questvault/db",
+    "db:embed": "tsx scripts/embed-backfill.ts",
     "db:studio": "turbo run db:studio --filter=@questvault/db",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\" --ignore-path .gitignore"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
     "prettier": "^3.3.0",
+    "tsx": "^4.15.0",
     "typescript": "^5.5.0"
   },
   "packageManager": "pnpm@9.4.0",

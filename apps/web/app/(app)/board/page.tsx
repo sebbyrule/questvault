@@ -9,6 +9,7 @@ import { BOARD_COLUMNS, STATUS_META } from "@/lib/format";
 import { TicketCard } from "@/components/ticket-card";
 import { NewTicketButton } from "@/components/new-ticket";
 import { ProjectSwitcher } from "@/components/project-switcher";
+import { TicketSearch } from "@/components/ticket-search";
 
 export const metadata: Metadata = { title: "Board" };
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export default async function BoardPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <TicketSearch projectId={project.id} />
           <ProjectSwitcher projects={projectOptions} currentSlug={project.slug} />
           <NewTicketButton projectId={project.id} />
         </div>

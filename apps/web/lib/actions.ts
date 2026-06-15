@@ -22,6 +22,7 @@ import { z } from "zod";
 import { getCurrentUser } from "./queries";
 import { uniqueProjectSlug } from "./slug";
 import { awardXp, type AwardXpOpts, type AwardResult } from "./xp";
+import { embedTicketText, searchTickets, type SearchResult } from "./search";
 
 /** Award XP without ever letting a gamification failure break the mutation. */
 async function tryAward(opts: AwardXpOpts): Promise<AwardResult> {
@@ -146,9 +147,22 @@ export async function createTicket(input: z.input<typeof createSchema>) {
       })
     : { xpAwarded: 0, badges: [] };
 
+  // Best-effort semantic-search embedding (no-op when embeddings are disabled).
+  if (created) await embedTicketText(created.id, title, description ?? null);
+
   revalidatePath("/board");
   revalidatePath("/dashboard");
   return { ok: true, ...award };
+}
+
+/** Project-scoped ticket search (semantic with full-text fallback). */
+export async function searchTicketsAction(
+  projectId: string,
+  query: string
+): Promise<SearchResult> {
+  const user = await getCurrentUser();
+  if (!user) return { mode: "text", results: [] };
+  return searchTickets(projectId, query);
 }
 
 // ─── Ticket detail editing ────────────────────────────────────────────────────
@@ -349,6 +363,15 @@ export async function updateTicketDetails(ticketId: string, patch: EditTicketInp
     });
     xpAwarded += a.xpAwarded;
     earnedBadges.push(...a.badges);
+  }
+
+  // Re-embed when the searchable text (title/description) changed.
+  if (set.title !== undefined || set.description !== undefined) {
+    await embedTicketText(
+      ticketId,
+      (set.title as string | undefined) ?? current.title,
+      (set.description as string | null | undefined) ?? current.description ?? null
+    );
   }
 
   revalidateTicket(ticketId);

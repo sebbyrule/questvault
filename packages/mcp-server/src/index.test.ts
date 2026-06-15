@@ -14,7 +14,9 @@ describe("createServer", () => {
 
   it("the registry exposes the core ticket tools", () => {
     const names = allTools.map((t) => t.name);
-    expect(names).toEqual(expect.arrayContaining(["list_tickets", "create_ticket", "close_ticket"]));
-    expect(allTools.length).toBeGreaterThanOrEqual(7);
+    expect(names).toEqual(
+      expect.arrayContaining(["list_tickets", "create_ticket", "close_ticket", "search_tickets"])
+    );
+    expect(allTools.length).toBeGreaterThanOrEqual(8);
   });
 });

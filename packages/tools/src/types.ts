@@ -17,6 +17,12 @@ export interface ToolContext {
   db: Database;
   agentId: string;
   reporterId: string;
+  /**
+   * Optional embedder for semantic search (injected by surfaces that have the
+   * AI package, e.g. the coach). Returns null when embeddings are disabled or
+   * unavailable — tools that use it must fall back to non-vector behaviour.
+   */
+  embed?: (text: string) => Promise<number[] | null>;
 }
 
 /**

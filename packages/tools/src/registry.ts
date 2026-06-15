@@ -6,6 +6,7 @@ import { updateTicketTool } from "./defs/update-ticket";
 import { closeTicketTool } from "./defs/close-ticket";
 import { addCommentTool } from "./defs/add-comment";
 import { listSprintsTool } from "./defs/list-sprints";
+import { searchTicketsTool } from "./defs/search-tickets";
 
 /**
  * The canonical tool set, shared by every surface (MCP server, AI coach).
@@ -20,6 +21,7 @@ export const allTools: ToolDefinition[] = [
   closeTicketTool,
   addCommentTool,
   listSprintsTool,
+  searchTicketsTool,
 ];
 
 export const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
