@@ -60,6 +60,10 @@ through environment variables alone.
   with a per-tool scope allowlist (a token only sees the tools it's granted),
   tracks last-used, and supports revocation. The legacy shared `MCP_AGENT_SECRET`
   still works as a dev fallback.
+- **Webhooks** — an admin **Webhooks** page subscribes external URLs to events
+  (`ticket.created` / `ticket.updated` / `ticket.closed` / `comment.created`).
+  Mutations from the UI **and** the MCP tools fire HMAC-signed POSTs
+  (`X-QuestVault-Signature`), with a delivery log and a one-click test send.
 
 See the [Roadmap](#roadmap) for what's next.
 
@@ -302,14 +306,15 @@ Phases mirror the [SDD](QuestVault_SDD.docx). Status reflects the current codeba
 - [ ] Proactive nudges (scheduled coach service)
 - [x] Semantic ticket search (pgvector HNSW + full-text fallback; board search + `search_tickets` tool)
 
-### Phase 4 — Agents (MCP)  ·  🟡 in progress
+### Phase 4 — Agents (MCP)  ·  🟢 done
 - [x] Shared, extensible tool registry (`packages/tools`) — 8 tools
 - [x] Serve the MCP tools over HTTP on `:3003` (Streamable HTTP, bearer auth, audit log)
 - [x] AI coach calls the same tools (in-app tool-use, both LM Studio + Anthropic)
 - [x] Workspace Settings (DB-overrides-env LLM config, SKILLS.md, tool allowlist)
 - [x] Project Template Hub (built-in presets + save-as-template)
 - [x] Scoped per-agent tokens (mint/scope/revoke; shared secret kept as dev fallback)
-- [ ] Webhook callbacks + Claude Code integration tests
+- [x] Webhook callbacks (HMAC-signed; web + MCP emits; delivery log)
+- [ ] Claude Code integration tests
 
 ### Phase 5 — Scale & launch  ·  ⚪ planned
 - [ ] Sprint analytics & burndown

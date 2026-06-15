@@ -20,10 +20,10 @@ Turborepo.
 
 ## 2. Current state (as of this handoff)
 
-- Branch `main`, latest feature commit `d01066e` (scoped agent tokens), pushed to `origin` (github `sebbyrule/questvault`).
+- Branch `main`, latest feature commit `dfc2dca` (webhooks), pushed to `origin` (github `sebbyrule/questvault`).
 - `pnpm typecheck` → **9/9 green**. `pnpm test` → **green repo-wide** (gamification 22,
-  web 13, db 5, ai 2, mcp-server 5). Web production build clean. **DB has 7 migrations**
-  (0006 = `agent_tokens`); re-run `pnpm db:migrate`.
+  web 13, db 8, ai 2, mcp-server 5). Web production build clean. **DB has 8 migrations**
+  (0006 = `agent_tokens`, 0007 = `webhooks` + `webhook_deliveries`); re-run `pnpm db:migrate`.
 - **Since the previous handoff** three features + a test pass landed on `main` (§4):
   the **gamification XP loop** (`7f04f12`) — ticket actions award XP for real —
   **first-run admin registration** (`e299c6f`) — real sign-up with hashed
@@ -39,7 +39,8 @@ Turborepo.
 ```
 apps/web            Next.js app — pages: /board, /board/[ticketId], /dashboard,
                     /projects, /templates, /settings (admin), /members (admin),
-                    /agents (admin), /auth/login, /auth/register, /auth/invite/[token];
+                    /agents (admin), /webhooks (admin), /auth/login,
+                    /auth/register, /auth/invite/[token];
                     API route /api/auth/[...nextauth] and BFF /api/coach;
                     middleware.ts (route protection). Server actions in
                     lib/*-actions.ts (incl. member-actions.ts), reads in
@@ -184,6 +185,18 @@ Two threads of work, both already on `main`:
   get `search_tickets`). Admin-gated `/agents` page (`agent-actions.ts`,
   `agents-manager.tsx`, `listAgentTokens`) to mint (raw token shown once) + revoke.
   Seed adds a read-only example token `qv_agent_example_readonly`.
+- `dfc2dca` **Webhook callbacks (finishes Phase 4).** Migration `0007` adds
+  `webhooks` (name, url, signing `secret`, `events` jsonb, isActive) +
+  `webhook_deliveries` (status/responseStatus/error/durationMs log).
+  `@questvault/db/webhooks.ts`: `signPayload` (HMAC-SHA256) + `isEventSubscribed`
+  (pure), `dispatchWebhooks(db, event)` (best-effort, signed POSTs + delivery log,
+  never throws) + `dispatchTest`. Emitted from **both** the web server actions
+  (`createTicket`/`moveTicket`/`updateTicketDetails`/`addComment` via a
+  `tryDispatch` wrapper) and the MCP tools (`create`/`update`/`close`/`add-comment`)
+  — events `ticket.created|updated|closed` + `comment.created`. Admin `/webhooks`
+  page (`webhook-actions.ts`, `webhooks-manager.tsx`, `listWebhooks` /
+  `listRecentDeliveries`): add subscriptions, pause/resume, delete, Send test,
+  delivery log. **Best-effort only — no retry worker** (future Phase 2).
 
 ## 5. Key decisions & conventions
 
@@ -294,10 +307,11 @@ pnpm test                                   # green (gamification 22, web 13, db
 
 ## 9. What's next (not done)
 
-- **Phase 4 remainder:** scoped per-agent MCP tokens shipped (`d01066e`).
-  Remaining: webhook callbacks; agent-token follow-ups (per-token reporter
-  identities / distinct agent users, expiry UI, usage metrics, rotating the
-  legacy `MCP_AGENT_SECRET` out); Claude Code integration tests.
+- **Phase 4 is done** (scoped tokens `d01066e`, webhooks `dfc2dca`). Remaining
+  follow-ups: a background webhook **retry/backoff worker** + manual redelivery
+  (needs stored payloads); Express-API webhook emit; agent-token extras (per-token
+  reporter identities / distinct agent users, expiry UI, usage metrics, rotating
+  the legacy `MCP_AGENT_SECRET` out); Claude Code integration tests.
 - **Phase 2:** XP is now awarded synchronously in the web server actions
   (`lib/xp.ts`). Remaining: move awarding to an event-bus worker
   (`services/workers`) so coach/MCP changes also mint XP; wire anti-gaming guards
