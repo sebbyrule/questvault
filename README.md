@@ -36,6 +36,10 @@ through environment variables alone.
   tickets, comment, list sprints) — each tool call shows as an activity chip.
   Answers are rendered as Markdown; reasoning-model "thinking" is streamed into a
   collapsible section.
+- **Semantic search** — a search box in the board header finds tickets by
+  meaning via the pgvector HNSW index, with a graceful fallback to Postgres
+  full-text when embeddings are disabled. The same logic is a `search_tickets`
+  tool the coach and MCP agents can call.
 - **Templates** — a Template Hub to spin up a project from a built-in preset
   (Scrum, Bug Tracker, Content Calendar) or a saved template, seeding labels, an
   active sprint, and starter tickets. Save any existing project as a reusable template.
@@ -286,10 +290,10 @@ Phases mirror the [SDD](QuestVault_SDD.docx). Status reflects the current codeba
 - [x] Local + cloud LLM client (LM Studio / Anthropic), reasoning-model aware
 - [x] Streaming AI coach chat grounded in ticket + sprint context (Markdown UI)
 - [ ] Proactive nudges (scheduled coach service)
-- [ ] Semantic ticket search (pgvector HNSW; index already created)
+- [x] Semantic ticket search (pgvector HNSW + full-text fallback; board search + `search_tickets` tool)
 
 ### Phase 4 — Agents (MCP)  ·  🟡 in progress
-- [x] Shared, extensible tool registry (`packages/tools`) — all 7 tools
+- [x] Shared, extensible tool registry (`packages/tools`) — 8 tools
 - [x] Serve the MCP tools over HTTP on `:3003` (Streamable HTTP, bearer auth, audit log)
 - [x] AI coach calls the same tools (in-app tool-use, both LM Studio + Anthropic)
 - [x] Workspace Settings (DB-overrides-env LLM config, SKILLS.md, tool allowlist)

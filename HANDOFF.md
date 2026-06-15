@@ -20,9 +20,9 @@ Turborepo.
 
 ## 2. Current state (as of this handoff)
 
-- Branch `main`, latest feature commit `0c2d7c7` (test foundation), pushed to `origin` (github `sebbyrule/questvault`).
+- Branch `main`, latest feature commit `f9f28ab` (semantic search), pushed to `origin` (github `sebbyrule/questvault`).
 - `pnpm typecheck` → **9/9 green**. `pnpm test` → **green repo-wide** (gamification 22,
-  web 13, ai 2; mcp-server runs `--passWithNoTests`). Web production build clean.
+  web 13, db 5, ai 2, mcp-server 2). Web production build clean.
 - **Since the previous handoff** three features + a test pass landed on `main` (§4):
   the **gamification XP loop** (`7f04f12`) — ticket actions award XP for real —
   **first-run admin registration** (`e299c6f`) — real sign-up with hashed
@@ -50,7 +50,7 @@ packages/db         Drizzle schema (one file per domain under src/schema/),
                     code never imports drizzle-orm directly. getAppSettings /
                     updateAppSettings live here.
 packages/tools      ★ KEYSTONE. Shared tool registry. One ToolDefinition per file
-                    under src/defs/ (7 tools); registry.ts aggregates `allTools` +
+                    under src/defs/ (8 tools); registry.ts aggregates `allTools` +
                     `toolsByName`. Pure logic — no audit, no transport. Consumed by
                     BOTH the MCP server and the AI coach.
 packages/mcp-server Serving layer for external agents. index.ts = createServer(ctx)
@@ -160,6 +160,18 @@ Two threads of work, both already on `main`:
   Seed makes **alice an `admin`**. NB: the invite control uses a button `onClick`,
   not `<form onSubmit>` — a native form submit raced into a page POST that bounced
   to login (§8).
+- (test foundation) — greened the suite + unit-tested the auth/XP decision logic
+  (`gamification/streak.ts`, `apps/web/lib/auth-rules.ts`, `roles.ts`), added a
+  real `mcp-server` smoke test, and wired `apps/web` into vitest.
+- `f9f28ab` **Semantic ticket search.** `apps/web/lib/search.ts`: `searchTickets`
+  (pgvector cosine over the existing HNSW index, **full-text fallback** when
+  embeddings off / embed fails / dims ≠ 1536) + `embedTicketText` (best-effort
+  embed on create/update). `searchTicketsAction` + a `TicketSearch` board-header
+  dropdown. New `search_tickets` tool (8th) — coach/MCP get semantic search via an
+  injected `ctx.embed` (DI avoids a `tools`↔`ai` cycle). `scripts/embed-backfill.ts`
+  + `pnpm db:embed`. **The embedding helpers (`embed`, `embeddingsEnabled`,
+  `toVectorLiteral`) moved from `@questvault/ai` into `@questvault/db`** because web
+  can't import `ai` (§8); web/ai/tools/backfill all import them from `db`.
 
 ## 5. Key decisions & conventions
 
@@ -210,7 +222,8 @@ pnpm install
 pnpm db:migrate && pnpm db:seed            # 6 migrations; seeds 7 tickets, 3 users (+agent), alice=admin
 pnpm dev                                    # web:3002, api:3001, mcp:3003
 pnpm typecheck                              # 9/9 green
-pnpm test                                   # green (gamification 22, web 13, ai 2)
+pnpm test                                   # green (gamification 22, web 13, db 5, ai 2, mcp 2)
+# pnpm db:embed                             # optional: backfill ticket embeddings (needs USE_EMBEDDINGS + a 1536-dim model)
 ```
 - **MCP:** `curl localhost:3003/health`; drive tools with an MCP SDK client +
   `Authorization: Bearer dev_mcp_secret` (see README "Connecting an MCP agent").
@@ -234,6 +247,15 @@ pnpm test                                   # green (gamification 22, web 13, ai
 - **Adding a workspace dep / schema change requires restarting the running Next dev
   server** (it won't hot-resolve a newly added package or a changed `@questvault/db`
   schema). Restart the API too after changing coach/ai/db code.
+- **`@questvault/ai` is NOT web-importable.** Its source uses `.js` import
+  specifiers (`from "./client.js"`), which tsx/Node resolve but **webpack cannot**
+  (the file is `client.ts`) → a `Module not found` 500. That's why the embedding
+  helpers (`embed`, `embeddingsEnabled`, `toVectorLiteral`) live in
+  `@questvault/db` (web-safe, extensionless), not `ai`. If web ever needs ai
+  logic, convert ai's imports to extensionless first.
+- **`tools`↔`ai` cycle:** `ai` depends on `tools` (the coach runs the registry),
+  so `tools` must NOT depend on `ai`. The `search_tickets` tool gets its embedder
+  via an injected `ctx.embed` (set by the coach) rather than importing it.
 - **Don't `<form onSubmit>` for a server-action button under the `(app)` layout.**
   In the preview/proxy env a native form submit raced into a *page* POST that fell
   through to a render where `auth()` was null → the layout redirected to
@@ -268,8 +290,10 @@ pnpm test                                   # green (gamification 22, web 13, ai
   (the velocity check in `constants.ts` is still unwired); real-time WebSocket
   updates. Also: `sprint_completed` / `review_submitted` rules exist but have no
   triggering surface yet.
-- **Phase 3:** proactive coach nudges (scheduled `services/ai-coach`), semantic
-  ticket search (pgvector HNSW index already exists; `USE_EMBEDDINGS`).
+- **Phase 3:** proactive coach nudges (scheduled `services/ai-coach`). Semantic
+  search shipped (`f9f28ab`) — remaining there: a GIN index for the full-text
+  fallback, and verifying the semantic path against a real 1536-dim embedding
+  model (local LM Studio `nomic-embed-text` is 768-dim → falls back to text).
 - **Auth/members remainder:** email delivery for invites (currently the link is
   copied manually), password reset/change, per-project membership management UI,
   and forced JWT revocation on deactivation (today it takes effect on next nav).
