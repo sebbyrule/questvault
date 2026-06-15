@@ -52,10 +52,14 @@ through environment variables alone.
   and a pgvector HNSW index ready for semantic search.
 - **REST API** — Express server with dev-token auth, ticket endpoints, and the
   AI-coach SSE endpoint.
-- **MCP server** — the 7 ticket tools served over HTTP on `:3003` (Streamable
-  HTTP, bearer auth, audit-logged) so external agents (Claude Code, Hermes, any
-  MCP client) can populate and maintain projects/tasks. The same tools power the
-  in-app coach via one shared registry (`packages/tools`).
+- **MCP server** — the 8 ticket tools served over HTTP on `:3003` (Streamable
+  HTTP, audit-logged) so external agents (Claude Code, Hermes, any MCP client)
+  can populate and maintain projects/tasks. The same tools power the in-app coach
+  via one shared registry (`packages/tools`).
+- **Scoped agent tokens** — an admin **Agents** page mints per-agent MCP tokens
+  with a per-tool scope allowlist (a token only sees the tools it's granted),
+  tracks last-used, and supports revocation. The legacy shared `MCP_AGENT_SECRET`
+  still works as a dev fallback.
 
 See the [Roadmap](#roadmap) for what's next.
 
@@ -201,12 +205,18 @@ curl -sN -X POST -H "Authorization: Bearer dev:alice@example.com" \
 
 ## Connecting an MCP agent
 
-External agents reach the 7 ticket tools at `http://localhost:3003/mcp` (MCP
-Streamable HTTP), authenticated with `Authorization: Bearer $MCP_AGENT_SECRET`
-(default `dev_mcp_secret`). An optional `X-Agent-Id` header labels the caller in
-the `agent_audit_log` table. Tools: `list_tickets`, `get_ticket`, `create_ticket`,
-`update_ticket`, `close_ticket`, `add_comment`, `list_sprints`. Agent-created
-tickets are reported by the seeded **QuestVault Agent** user.
+External agents reach the 8 ticket tools at `http://localhost:3003/mcp` (MCP
+Streamable HTTP). Tools: `list_tickets`, `get_ticket`, `create_ticket`,
+`update_ticket`, `close_ticket`, `add_comment`, `list_sprints`, `search_tickets`.
+Agent-authored writes are reported by the seeded **QuestVault Agent** user.
+
+**Auth — two options:**
+- **Scoped per-agent token** (preferred): mint one on the admin **Agents** page;
+  it carries a per-tool scope allowlist (the agent only sees its granted tools),
+  tracks last-used, and can be revoked. The token's name is the trusted agent id
+  in `agent_audit_log`. The seed creates a read-only example: `qv_agent_example_readonly`.
+- **Legacy shared secret** (dev fallback): `Authorization: Bearer $MCP_AGENT_SECRET`
+  (default `dev_mcp_secret`) — all tools, attributed to the agent user.
 
 ```bash
 curl -s http://localhost:3003/health        # → {"status":"ok",...}
@@ -298,7 +308,7 @@ Phases mirror the [SDD](QuestVault_SDD.docx). Status reflects the current codeba
 - [x] AI coach calls the same tools (in-app tool-use, both LM Studio + Anthropic)
 - [x] Workspace Settings (DB-overrides-env LLM config, SKILLS.md, tool allowlist)
 - [x] Project Template Hub (built-in presets + save-as-template)
-- [ ] Scoped per-agent tokens (currently a shared secret)
+- [x] Scoped per-agent tokens (mint/scope/revoke; shared secret kept as dev fallback)
 - [ ] Webhook callbacks + Claude Code integration tests
 
 ### Phase 5 — Scale & launch  ·  ⚪ planned

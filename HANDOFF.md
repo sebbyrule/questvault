@@ -20,9 +20,10 @@ Turborepo.
 
 ## 2. Current state (as of this handoff)
 
-- Branch `main`, latest feature commit `f9f28ab` (semantic search), pushed to `origin` (github `sebbyrule/questvault`).
+- Branch `main`, latest feature commit `d01066e` (scoped agent tokens), pushed to `origin` (github `sebbyrule/questvault`).
 - `pnpm typecheck` → **9/9 green**. `pnpm test` → **green repo-wide** (gamification 22,
-  web 13, db 5, ai 2, mcp-server 2). Web production build clean.
+  web 13, db 5, ai 2, mcp-server 5). Web production build clean. **DB has 7 migrations**
+  (0006 = `agent_tokens`); re-run `pnpm db:migrate`.
 - **Since the previous handoff** three features + a test pass landed on `main` (§4):
   the **gamification XP loop** (`7f04f12`) — ticket actions award XP for real —
   **first-run admin registration** (`e299c6f`) — real sign-up with hashed
@@ -38,7 +39,7 @@ Turborepo.
 ```
 apps/web            Next.js app — pages: /board, /board/[ticketId], /dashboard,
                     /projects, /templates, /settings (admin), /members (admin),
-                    /auth/login, /auth/register, /auth/invite/[token];
+                    /agents (admin), /auth/login, /auth/register, /auth/invite/[token];
                     API route /api/auth/[...nextauth] and BFF /api/coach;
                     middleware.ts (route protection). Server actions in
                     lib/*-actions.ts (incl. member-actions.ts), reads in
@@ -172,6 +173,17 @@ Two threads of work, both already on `main`:
   + `pnpm db:embed`. **The embedding helpers (`embed`, `embeddingsEnabled`,
   `toVectorLiteral`) moved from `@questvault/ai` into `@questvault/db`** because web
   can't import `ai` (§8); web/ai/tools/backfill all import them from `db`.
+- `d01066e` **Scoped per-agent MCP tokens.** Migration `0006` adds `agent_tokens`
+  (name, SHA-256 `token_hash`, per-tool `scopes` jsonb (`["*"]`=all), createdBy,
+  reporterId, last_used_at, expires_at, revoked_at). `@questvault/db/agents.ts`:
+  `hashAgentToken` + `isToolAllowed` (pure) + `resolveAgentToken` (revoked/expired
+  + best-effort last-used stamp), shared by the web minter and the mcp-server
+  verifier. `http.ts` `authenticate()` resolves a scoped token first, else the
+  legacy `MCP_AGENT_SECRET` (all scopes, agent-user reporter); `createServer(ctx,
+  allowed?)` registers only the scoped tools (`ctx.embed` injected so MCP agents
+  get `search_tickets`). Admin-gated `/agents` page (`agent-actions.ts`,
+  `agents-manager.tsx`, `listAgentTokens`) to mint (raw token shown once) + revoke.
+  Seed adds a read-only example token `qv_agent_example_readonly`.
 
 ## 5. Key decisions & conventions
 
@@ -219,7 +231,7 @@ Two threads of work, both already on `main`:
 ```bash
 docker compose up -d                       # Postgres(:5433 locally)+Redis
 pnpm install
-pnpm db:migrate && pnpm db:seed            # 6 migrations; seeds 7 tickets, 3 users (+agent), alice=admin
+pnpm db:migrate && pnpm db:seed            # 7 migrations; seeds tickets/users (alice=admin) + example agent token
 pnpm dev                                    # web:3002, api:3001, mcp:3003
 pnpm typecheck                              # 9/9 green
 pnpm test                                   # green (gamification 22, web 13, db 5, ai 2, mcp 2)
@@ -282,8 +294,10 @@ pnpm test                                   # green (gamification 22, web 13, db
 
 ## 9. What's next (not done)
 
-- **Phase 4 remainder:** scoped per-agent MCP tokens (replace the shared
-  `MCP_AGENT_SECRET`; likely an `agent_tokens` table) and webhook callbacks.
+- **Phase 4 remainder:** scoped per-agent MCP tokens shipped (`d01066e`).
+  Remaining: webhook callbacks; agent-token follow-ups (per-token reporter
+  identities / distinct agent users, expiry UI, usage metrics, rotating the
+  legacy `MCP_AGENT_SECRET` out); Claude Code integration tests.
 - **Phase 2:** XP is now awarded synchronously in the web server actions
   (`lib/xp.ts`). Remaining: move awarding to an event-bus worker
   (`services/workers`) so coach/MCP changes also mint XP; wire anti-gaming guards
