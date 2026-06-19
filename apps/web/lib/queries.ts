@@ -389,6 +389,7 @@ export type DeliveryRow = {
   webhookName: string | null;
   eventType: string;
   status: string;
+  attempts: number;
   responseStatus: number | null;
   error: string | null;
   createdAt: Date;
@@ -402,6 +403,7 @@ export async function listRecentDeliveries(limit = 20): Promise<DeliveryRow[]> {
       webhookName: webhooks.name,
       eventType: webhookDeliveries.eventType,
       status: webhookDeliveries.status,
+      attempts: webhookDeliveries.attempts,
       responseStatus: webhookDeliveries.responseStatus,
       error: webhookDeliveries.error,
       createdAt: webhookDeliveries.createdAt,

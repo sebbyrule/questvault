@@ -16,9 +16,16 @@ import {
   createRedis,
   type DomainEvent,
 } from "@questvault/events";
+import { db, enqueueWebhooks, processDueDeliveries, type WebhookEventType } from "@questvault/db";
 import { awardXpForEvent } from "./handlers/xp.js";
 
 let running = true;
+
+/** How often to sweep for due webhook deliveries (retries / manual redeliveries). */
+const SWEEP_INTERVAL_MS = 5000;
+
+// Event types that map to an outbound webhook (pr.linked is XP-only).
+const WEBHOOK_TYPES = new Set<string>(["ticket.created", "ticket.updated", "ticket.closed", "comment.created"]);
 
 /**
  * Route one event to its side effects. XP awards live here (idempotent, see
@@ -79,7 +86,14 @@ async function handleEvent(event: DomainEvent): Promise<void> {
       break;
     }
     default:
-      break; // ticket.updated / comment.created: no XP (webhooks land in Inc 3)
+      break; // ticket.updated / comment.created mint no XP (webhook-only)
+  }
+
+  // Fan the event out to subscribed webhooks (off the request path), then nudge
+  // the sweep so delivery is prompt rather than waiting for the next tick.
+  if (WEBHOOK_TYPES.has(event.type)) {
+    const n = await enqueueWebhooks(db, { type: event.type as WebhookEventType, data: p });
+    if (n > 0) await processDueDeliveries(db);
   }
 
   const tail = summary
@@ -102,8 +116,15 @@ async function main(): Promise<void> {
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
 
+  // Periodic sweep: deliver due webhook deliveries (backoff retries + manual
+  // redeliveries enqueued by the admin UI). On-event delivery is nudged inline.
+  const sweep = setInterval(() => {
+    void processDueDeliveries(db);
+  }, SWEEP_INTERVAL_MS);
+
   await consumeEvents(redis, handleEvent, { isRunning: () => running });
 
+  clearInterval(sweep);
   await redis.quit().catch(() => {});
   console.log("[worker] stopped.");
   process.exit(0);

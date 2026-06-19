@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { tickets, comments } from "@questvault/db/schema";
-import { eq, dispatchWebhooks } from "@questvault/db";
+import { eq } from "@questvault/db";
 import type { ToolDefinition } from "../types";
 
 const schema = z.object({
@@ -27,10 +27,7 @@ export const addCommentTool: ToolDefinition = {
       .values({ ticketId: input.ticket_id, agentId, body: input.body })
       .returning();
 
-    await dispatchWebhooks(db, {
-      type: "comment.created",
-      data: { id: created?.id, ticketId: input.ticket_id, agentId, body: input.body },
-    });
+    // Emit a domain event; the worker dispatches any subscribed webhooks.
     await publish?.(
       "comment.created",
       { id: created?.id, ticketId: input.ticket_id, agentId, body: input.body },

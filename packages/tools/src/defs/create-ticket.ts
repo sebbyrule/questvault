@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { tickets, ticketLabels, ticketPriorityEnum } from "@questvault/db/schema";
-import { eq, max, dispatchWebhooks } from "@questvault/db";
+import { eq, max } from "@questvault/db";
 import type { ToolDefinition } from "../types";
 
 const schema = z.object({
@@ -56,15 +56,8 @@ export const createTicketTool: ToolDefinition = {
       return row;
     });
 
-    await dispatchWebhooks(db, {
-      type: "ticket.created",
-      data: {
-        id: created.id, number: created.number, title: created.title,
-        projectId: created.projectId, status: created.status, priority: created.priority,
-      },
-    });
-
-    // Emit a domain event so the worker awards XP (reporter = the agent).
+    // Emit a domain event; the worker awards XP (reporter = the agent) and
+    // dispatches any subscribed webhooks.
     await publish?.(
       "ticket.created",
       {

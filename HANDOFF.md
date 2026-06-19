@@ -24,9 +24,10 @@ Turborepo.
   **Two unmerged feature branches** carry the event-bus work (§11): `feat/event-bus-worker`
   (Inc 1, fast-forward-merged into `main` locally, unpushed) and `feat/xp-worker` (Inc 2).
 - `pnpm typecheck` → **11/11 green** (added `@questvault/events` + `services/workers`).
-  `pnpm test` → **green repo-wide**. Web production build clean. **DB has 9 migrations**
-  (0007 = `webhooks` + `webhook_deliveries`, 0008 = `processed_events` worker idempotency
-  ledger); re-run `pnpm install` && `pnpm db:migrate`.
+  `pnpm test` → **green repo-wide**. Web production build clean. **DB has 10 migrations**
+  (0008 = `processed_events` worker idempotency ledger; 0009 = webhook delivery
+  retry columns — `payload`/`attempts`/`next_attempt_at`); re-run `pnpm install` &&
+  `pnpm db:migrate`.
 - **Since the previous handoff** three features + a test pass landed on `main` (§4):
   the **gamification XP loop** (`7f04f12`) — ticket actions award XP for real —
   **first-run admin registration** (`e299c6f`) — real sign-up with hashed
@@ -75,8 +76,9 @@ packages/storage       Local/S3 file storage.
 services/api        Express REST + SSE (:3001). Routes: tickets, ai/chat.
 services/workers    Background worker — the single event-bus consumer. Awards XP
                     idempotently (handlers/xp.ts → `awardXpForEvent`, guarded by
-                    `processed_events`) on ticket.created/closed + pr.linked; webhook
-                    dispatch moves here in Inc 3. `tsx watch src/index.ts`, in `pnpm dev`.
+                    `processed_events`) on ticket.created/closed + pr.linked, and
+                    dispatches webhooks (enqueue-on-event + a 5s retry sweep).
+                    `tsx watch src/index.ts`, in `pnpm dev`.
 services/ai-coach   Empty dir (planned).
 apps/mobile         Empty (planned).
 ```
@@ -310,8 +312,8 @@ pnpm test                                   # green (gamification 22, web 13, db
   colocated `*.test.ts`; `gamification`, `ai`, and now `apps/web` have a runner.
   `@questvault/db`'s client connects **on import** (throws without `DATABASE_URL`),
   so web tests must import only DB-free modules (`lib/roles.ts`, `lib/auth-rules.ts`,
-  `@questvault/gamification`) — never `lib/xp.ts`/`queries.ts`/actions (those pull
-  the db client). Pure decision-logic was extracted into those DB-free modules to
+  `@questvault/gamification`) — never `queries.ts`/actions (those pull the db
+  client). Pure decision-logic was extracted into those DB-free modules to
   keep it testable; the DB I/O glue is covered by manual/preview verification.
   `mcp-server` runs `--passWithNoTests` (no real test yet). No test-DB harness exists.
 - After live verification, **test data was cleaned up** (re-seeded to baseline:
@@ -319,11 +321,12 @@ pnpm test                                   # green (gamification 22, web 13, db
 
 ## 9. What's next (not done)
 
-- **Phase 4 is done** (scoped tokens `d01066e`, webhooks `dfc2dca`). Remaining
-  follow-ups: a background webhook **retry/backoff worker** + manual redelivery
-  (needs stored payloads); Express-API webhook emit; agent-token extras (per-token
-  reporter identities / distinct agent users, expiry UI, usage metrics, rotating
-  the legacy `MCP_AGENT_SECRET` out); Claude Code integration tests.
+- **Phase 4 is done** (scoped tokens `d01066e`, webhooks `dfc2dca`; webhook
+  **retry/backoff + manual redelivery** landed in §11 Inc 3). Remaining
+  follow-ups: Express-API webhook/XP emit (the API mutations don't publish events
+  yet — only web/coach/MCP do); agent-token extras (per-token reporter identities /
+  distinct agent users, expiry UI, usage metrics, rotating the legacy
+  `MCP_AGENT_SECRET` out); Claude Code integration tests.
 - **Phase 2:** XP awarding now runs in the **event-bus worker** (`services/workers`,
   see §11 Inc 2) — web/coach/MCP mutations all mint XP idempotently. Remaining:
   wire anti-gaming guards (the velocity check in `constants.ts` is still unwired);
@@ -394,10 +397,28 @@ Three increments (each its own verify→merge):
   (idempotent); closing a (backdated) ticket through the **MCP `close_ticket` tool**
   minted +50 XP for its assignee; the anti-gaming quality gate correctly zeroed a
   freshly-created ticket. `typecheck` 11/11, tests green, web production build clean.
-- **Inc 3 — route webhooks through the worker + retry/backoff.** Replace the
-  inline `dispatchWebhooks` calls (web + MCP tools — restoring `@questvault/tools`
-  purity) with event publishes; the worker dispatches with exponential-backoff
-  retry + manual redelivery (store the payload on the delivery row).
+- **Inc 3 — route webhooks through the worker + retry/backoff (DONE on this branch).**
+  The old fire-and-forget `dispatchWebhooks` is gone. `webhook_deliveries` became a
+  **retryable delivery record** (migration `0009`: `payload`, `attempts`,
+  `next_attempt_at`, `updated_at` + a `(status, next_attempt_at)` sweep index;
+  status is now `pending|success|failed`). New `@questvault/db/webhooks.ts` API:
+  `enqueueWebhooks` (fan an event out to `pending` rows, storing the payload),
+  `processDueDeliveries` (deliver due rows, exponential backoff `backoffMs` up to
+  `MAX_ATTEMPTS=5`), `redeliverDelivery` (manual re-queue, fresh budget),
+  `dispatchTest` (one-shot ping). The **worker** enqueues on every webhook-relevant
+  event and nudges delivery, plus a 5s sweep for retries/redeliveries. Inline
+  `dispatchWebhooks` removed from the web actions **and** the MCP tools (so
+  `@questvault/tools` is transport-free again — they only `ctx.publish`). Admin UI:
+  a **Redeliver** button per delivery + status/attempts in the log
+  (`redeliverWebhook` action; `listRecentDeliveries` exposes `attempts`).
+  **Verified live**: a bus `ticket.created` fanned out to two hooks — one delivered
+  with a valid HMAC signature (success, 1 attempt), one returning 500 went `pending`
+  with a future backoff; fixing the sink + **manual redeliver** drove it to success.
+  `typecheck` 11/11, tests green (+`backoffMs`), web build clean.
+
+  **Tradeoff:** webhooks now require the event bus (a down Redis means no webhook
+  *and* no XP for that mutation) — the intended "all mutations emit an event"
+  architecture, vs. the previous synchronous best-effort dispatch.
 
 Note: the worker process on Windows is the `node --require …tsx … src/index.ts`
 child, **not** the `tsx` CLI wrapper — kill the child (match on `--require` +

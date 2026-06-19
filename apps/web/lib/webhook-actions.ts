@@ -5,7 +5,7 @@
  * send a test ping. Admin-gated via requireAdmin().
  */
 import { randomBytes } from "node:crypto";
-import { db, eq, dispatchTest, WEBHOOK_EVENTS } from "@questvault/db";
+import { db, eq, dispatchTest, redeliverDelivery, WEBHOOK_EVENTS } from "@questvault/db";
 import { webhooks } from "@questvault/db/schema";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -62,6 +62,15 @@ export async function deleteWebhook(id: string) {
 export async function testWebhook(id: string) {
   if (!(await requireAdmin())) return { ok: false as const, error: "Forbidden" };
   await dispatchTest(db, id);
+  revalidatePath("/webhooks");
+  return { ok: true as const };
+}
+
+/** Re-queue a past delivery; the background worker re-sends it (with a fresh retry budget). */
+export async function redeliverWebhook(deliveryId: string) {
+  if (!(await requireAdmin())) return { ok: false as const, error: "Forbidden" };
+  const ok = await redeliverDelivery(db, deliveryId);
+  if (!ok) return { ok: false as const, error: "Delivery not found" };
   revalidatePath("/webhooks");
   return { ok: true as const };
 }

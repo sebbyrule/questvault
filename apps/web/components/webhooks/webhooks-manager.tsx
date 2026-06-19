@@ -12,6 +12,7 @@ import {
   setWebhookActive,
   deleteWebhook,
   testWebhook,
+  redeliverWebhook,
 } from "@/lib/webhook-actions";
 import type { WebhookRow, DeliveryRow } from "@/lib/queries";
 
@@ -197,6 +198,9 @@ export function WebhooksManager({
       <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
         <div className="border-b border-gray-100 px-6 py-4">
           <h2 className="text-sm font-semibold text-gray-700">Recent deliveries</h2>
+          <p className="mt-0.5 text-xs text-gray-400">
+            Delivered by the background worker, with retry/backoff. Redeliver re-queues a past delivery.
+          </p>
         </div>
         {deliveries.length === 0 ? (
           <p className="px-6 py-4 text-sm text-gray-400">No deliveries yet.</p>
@@ -207,7 +211,11 @@ export function WebhooksManager({
                 <span
                   className={clsx(
                     "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
-                    d.status === "success" ? "bg-teal-50 text-teal-600" : "bg-red-50 text-red-600"
+                    d.status === "success"
+                      ? "bg-teal-50 text-teal-600"
+                      : d.status === "pending"
+                        ? "bg-amber-50 text-amber-600"
+                        : "bg-red-50 text-red-600"
                   )}
                 >
                   {d.status}
@@ -215,12 +223,21 @@ export function WebhooksManager({
                 <span className="font-mono text-xs text-gray-600">{d.eventType}</span>
                 <span className="min-w-0 flex-1 truncate text-xs text-gray-400">
                   {d.webhookName ?? "—"}
+                  {d.attempts > 0 && ` · try ${d.attempts}`}
                   {d.responseStatus != null && ` · HTTP ${d.responseStatus}`}
                   {d.error && ` · ${d.error}`}
                 </span>
                 <span className="shrink-0 text-[11px] text-gray-400">
                   {d.createdAt.toLocaleTimeString()}
                 </span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => run(() => redeliverWebhook(d.id))}
+                  className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 disabled:opacity-40"
+                >
+                  Redeliver
+                </button>
               </li>
             ))}
           </ul>

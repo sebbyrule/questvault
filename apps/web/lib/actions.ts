@@ -5,7 +5,7 @@
  * write through @questvault/db, then revalidate the affected pages. Writes are
  * attributed to the Auth.js session user via getCurrentUser().
  */
-import { db, eq, and, max, inArray, dispatchWebhooks, type WebhookEvent } from "@questvault/db";
+import { db, eq, and, max, inArray } from "@questvault/db";
 import { publishEvent, type EventType } from "@questvault/events";
 import {
   tickets,
@@ -25,10 +25,10 @@ import { uniqueProjectSlug } from "./slug";
 import { embedTicketText, searchTickets, type SearchResult } from "./search";
 
 /**
- * Emit a domain event to the bus so the worker awards XP (and, from Inc 3,
- * dispatches webhooks). Best-effort: publishEvent already swallows a down bus,
- * but wrap defensively so a mutation never breaks. XP is therefore awarded
- * asynchronously — totals surface on the next render via revalidatePath (the
+ * Emit a domain event to the bus. The worker consumes it to award XP and
+ * dispatch webhooks — both now run off the request path. Best-effort:
+ * publishEvent already swallows a down bus, but wrap defensively so a mutation
+ * never breaks. XP totals surface on the next render via revalidatePath (the
  * old synchronous "+N XP" toast is gone; real-time push is future work).
  */
 async function tryPublish(
@@ -40,15 +40,6 @@ async function tryPublish(
     await publishEvent(type, payload, actorId);
   } catch (err) {
     console.error("[events] publish failed:", err);
-  }
-}
-
-/** Fire webhooks best-effort; never let a delivery failure break the mutation. */
-async function tryDispatch(event: WebhookEvent): Promise<void> {
-  try {
-    await dispatchWebhooks(db, event);
-  } catch (err) {
-    console.error("[webhooks] dispatch failed:", err);
   }
 }
 
@@ -93,10 +84,8 @@ export async function moveTicket(ticketId: string, status: string) {
     id: ticketId, number: current.number, title: current.title,
     projectId: current.projectId, status: parsed.data, priority: current.priority,
   };
-  await tryDispatch({ type: "ticket.updated", data: hookData });
   await tryPublish("ticket.updated", hookData, actor?.id ?? null);
   if (closing) {
-    await tryDispatch({ type: "ticket.closed", data: hookData });
     // The worker credits XP to the assignee (else the actor) on this event.
     await tryPublish(
       "ticket.closed",
@@ -157,7 +146,6 @@ export async function createTicket(input: z.input<typeof createSchema>) {
 
   if (created) {
     const hookData = { id: created.id, number, title, status: "backlog", priority, projectId };
-    await tryDispatch({ type: "ticket.created", data: hookData });
     // The worker awards ticket_created XP / first-ticket badge to the reporter.
     await tryPublish(
       "ticket.created",
@@ -357,11 +345,9 @@ export async function updateTicketDetails(ticketId: string, patch: EditTicketInp
     status: input.status ?? current.status,
     priority: input.priority ?? current.priority,
   };
-  await tryDispatch({ type: "ticket.updated", data: hookData });
   await tryPublish("ticket.updated", hookData, actor?.id ?? null);
 
   if (input.status === "done" && current.status !== "done") {
-    await tryDispatch({ type: "ticket.closed", data: hookData });
     const effectiveAssignee =
       input.assigneeId !== undefined ? input.assigneeId : current.assigneeId;
     await tryPublish(
@@ -459,7 +445,6 @@ export async function addComment(ticketId: string, body: string) {
 
   if (created) {
     const data = { id: created.id, ticketId, authorId: user.id, body: parsed.data.body };
-    await tryDispatch({ type: "comment.created", data });
     await tryPublish("comment.created", data, user.id);
   }
 

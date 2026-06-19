@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 // Import directly (not the package index) to stay DB-free.
-import { signPayload, isEventSubscribed } from "./webhooks";
+import { signPayload, isEventSubscribed, backoffMs } from "./webhooks";
 
 describe("signPayload", () => {
   it("is a deterministic HMAC-SHA256 hex digest", () => {
@@ -21,5 +21,14 @@ describe("isEventSubscribed", () => {
     expect(isEventSubscribed(["ticket.created"], "ticket.created")).toBe(true);
     expect(isEventSubscribed(["ticket.created"], "ticket.closed")).toBe(false);
     expect(isEventSubscribed([], "ticket.created")).toBe(false);
+  });
+});
+
+describe("backoffMs", () => {
+  it("grows exponentially from 30s and caps at 30m", () => {
+    expect(backoffMs(1)).toBe(30_000);
+    expect(backoffMs(2)).toBe(60_000);
+    expect(backoffMs(3)).toBe(120_000);
+    expect(backoffMs(99)).toBe(30 * 60_000); // capped
   });
 });

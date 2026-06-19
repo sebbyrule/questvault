@@ -5,7 +5,7 @@ import {
   ticketStatusEnum,
   ticketPriorityEnum,
 } from "@questvault/db/schema";
-import { eq, dispatchWebhooks } from "@questvault/db";
+import { eq } from "@questvault/db";
 import type { ToolDefinition } from "../types";
 
 const schema = z.object({
@@ -114,10 +114,8 @@ export const updateTicketTool: ToolDefinition = {
         id: updated.id, number: updated.number, title: updated.title,
         projectId: updated.projectId, status: updated.status, priority: updated.priority,
       };
-      await dispatchWebhooks(db, { type: "ticket.updated", data });
       await publish?.("ticket.updated", data, reporterId);
       if (updated.status === "done" && current.status !== "done") {
-        await dispatchWebhooks(db, { type: "ticket.closed", data });
         // XP for the close: credit the assignee, else the acting agent.
         await publish?.(
           "ticket.closed",

@@ -6,10 +6,14 @@ export { embed, embeddingsEnabled, toVectorLiteral } from "./embeddings";
 export { hashAgentToken, isToolAllowed, resolveAgentToken } from "./agents";
 export {
   WEBHOOK_EVENTS,
+  MAX_ATTEMPTS,
   signPayload,
   isEventSubscribed,
-  dispatchWebhooks,
+  backoffMs,
+  enqueueWebhooks,
+  processDueDeliveries,
   dispatchTest,
+  redeliverDelivery,
   type WebhookEventType,
   type WebhookEvent,
 } from "./webhooks";

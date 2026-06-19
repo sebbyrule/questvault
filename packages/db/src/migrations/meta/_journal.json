@@ -64,6 +64,13 @@
       "when": 1781830558621,
       "tag": "0008_first_speed_demon",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781865341980,
+      "tag": "0009_clever_drax",
+      "breakpoints": true
     }
   ]
 }

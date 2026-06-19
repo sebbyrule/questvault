@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { tickets, comments } from "@questvault/db/schema";
-import { eq, dispatchWebhooks } from "@questvault/db";
+import { eq } from "@questvault/db";
 import type { ToolDefinition } from "../types";
 
 const schema = z.object({
@@ -44,18 +44,13 @@ export const closeTicketTool: ToolDefinition = {
       }
     });
 
-    await dispatchWebhooks(db, {
-      type: "ticket.closed",
-      data: { id: input.ticket_id, projectId: ticket.projectId, status: "done" },
-    });
-
-    // Emit a domain event so the worker awards XP (credits the assignee, else
-    // the acting agent).
+    // Emit a domain event; the worker awards XP (credits the assignee, else the
+    // acting agent) and dispatches any subscribed webhooks.
     await publish?.(
       "ticket.closed",
       {
         id: input.ticket_id, number: ticket.number, title: ticket.title,
-        projectId: ticket.projectId, priority: ticket.priority,
+        projectId: ticket.projectId, status: "done", priority: ticket.priority,
         assigneeId: ticket.assigneeId,
         openedAt: ticket.createdAt.toISOString(), closedAt: now.toISOString(),
       },

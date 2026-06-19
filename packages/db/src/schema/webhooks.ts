@@ -19,9 +19,11 @@ export const webhooks = pgTable("webhooks", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Delivery log ───────────────────────────────────────────────────────────
-// Lightweight per-attempt record (no payload stored). Best-effort delivery only;
-// there is no background retry worker yet.
+// ─── Deliveries ───────────────────────────────────────────────────────────
+// One retryable delivery record per (webhook, event). The background worker
+// dispatches it (off the request path) and retries with exponential backoff,
+// updating the row in place. `payload` is stored so a delivery can be retried
+// and manually redelivered with a stable, identically-signed body.
 
 export const webhookDeliveries = pgTable(
   "webhook_deliveries",
@@ -31,15 +33,25 @@ export const webhookDeliveries = pgTable(
       .notNull()
       .references(() => webhooks.id, { onDelete: "cascade" }),
     eventType: text("event_type").notNull(),
-    status: text("status").notNull(), // "success" | "failed"
+    // "pending" (queued / awaiting retry) | "success" | "failed" (retries exhausted)
+    status: text("status").notNull(),
+    // The event `data` — the signed body is rebuilt deterministically from this
+    // + the row id/createdAt, so retries carry an identical signature.
+    payload: jsonb<Record<string, unknown>>("payload"),
+    attempts: integer("attempts").notNull().default(0),
+    // When the next attempt is due (set while pending; null once terminal).
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
     responseStatus: integer("response_status"),
     error: text("error"),
     durationMs: integer("duration_ms"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     webhookIdIdx: index("webhook_deliveries_webhook_id_idx").on(t.webhookId),
     createdAtIdx: index("webhook_deliveries_created_at_idx").on(t.createdAt),
+    // Drives the worker's "due deliveries" sweep.
+    dueIdx: index("webhook_deliveries_due_idx").on(t.status, t.nextAttemptAt),
   })
 );
 
