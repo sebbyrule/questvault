@@ -62,10 +62,18 @@ packages/ai         Provider-agnostic LLM client (LM Studio + Anthropic, raw fet
                     the tool-calling loop (streamChatWithTools), coach, context
                     builder, tool-schema (zod→JSON schema).
 packages/gamification  XP rules + anti-gaming guards (+ vitest tests).
+packages/events     ★ Redis event bus. publishEvent (best-effort XADD to the
+                    `questvault:events` stream) + consumeEvents (XREADGROUP
+                    consumer group `questvault-workers`, at-least-once, idempotent
+                    consumers) + the domain-event catalog. Publishers: web/api/MCP;
+                    consumer: services/workers.
 packages/api-client    Shared Zod request schemas.
 packages/storage       Local/S3 file storage.
 services/api        Express REST + SSE (:3001). Routes: tickets, ai/chat.
-services/{workers,ai-coach}  Empty dirs (planned).
+services/workers    Background worker — the single event-bus consumer. Reacts to
+                    domain events (awards XP / dispatches webhooks — see §11).
+                    `tsx watch src/index.ts`, started by `pnpm dev`.
+services/ai-coach   Empty dir (planned).
 apps/mobile         Empty (planned).
 ```
 
@@ -340,3 +348,41 @@ pnpm test                                   # green (gamification 22, web 13, db
   each on explicit request.
 - Verify changes for real (run it, check the DB), clean up test artifacts, and
   report failures honestly. Don't commit/push/merge unless asked.
+
+## 11. In progress — Event-bus worker (Phase 2 architecture alignment)
+
+Branch `feat/event-bus-worker` (not merged). Goal: honour AGENT.md's mandate —
+*"Never award XP inside a request handler. Publish an event; let the gamification
+worker consume it."* Today XP is awarded **synchronously** in the web server
+actions (`lib/xp.ts`), and `dispatchWebhooks` is called inline from both the web
+actions and the MCP tools; coach/MCP-driven changes therefore mint **no XP**.
+Redis was provisioned (docker + an `ioredis` dep on `services/api`) but **never
+wired** — there was no `new Redis()` anywhere and `services/workers` was empty.
+
+Three increments (each its own verify→merge):
+
+- **Inc 1 — event bus + worker skeleton (DONE on this branch).** New
+  `@questvault/events` (Redis Streams: `publishEvent` best-effort XADD;
+  `consumeEvents` XREADGROUP consumer group `questvault-workers`, drains pending
+  on boot then tails, ACKs on success, re-creates the group on `NOGROUP`). New
+  `services/workers` consumer (log-only handler for now), wired into `pnpm dev`
+  via turbo (it has a `dev` script). `typecheck` 11/11, tests green (events: 3).
+  **Verified live** against Docker Redis: a single consumer reads all published
+  events exactly once with zero pending; publish degrades to a no-op (returns
+  `null`, logs once, never throws) when Redis is down.
+- **Inc 2 — move XP awarding to the worker (next).** Relocate the `awardXp` glue
+  out of `apps/web/lib/xp.ts` into a web-free, DB-importable module (mirror the
+  `webhooks.ts` "takes the `db` handle" pattern) and make it **idempotent** keyed
+  by `eventId` (migration `0008`: `xp_events.event_id` unique + a `processed_events`
+  guard). Publishers (web actions + MCP tools) emit `ticket.created` /
+  `ticket.closed` / `pr.linked`; remove the inline `awardXp` calls. **Decided
+  tradeoff:** drop the synchronous "+N XP" `<XpToaster>` return — totals surface
+  via `revalidatePath`; real-time WS push is the proper future fix.
+- **Inc 3 — route webhooks through the worker + retry/backoff.** Replace the
+  inline `dispatchWebhooks` calls (web + MCP tools — restoring `@questvault/tools`
+  purity) with event publishes; the worker dispatches with exponential-backoff
+  retry + manual redelivery (store the payload on the delivery row).
+
+Note: the worker process on Windows is the `node --require …tsx … src/index.ts`
+child, **not** the `tsx` CLI wrapper — kill the child (match on `--require` +
+`tsx`) or zombie consumers will split the group and steal events during testing.
