@@ -13,7 +13,7 @@ export const addCommentTool: ToolDefinition = {
   description:
     "Add a comment to a ticket. Attributed to the calling agent (recorded with the agent's identity).",
   inputSchema: schema,
-  async execute(raw, { db, agentId }) {
+  async execute(raw, { db, agentId, reporterId, publish }) {
     const input = schema.parse(raw);
 
     const ticket = await db.query.tickets.findFirst({
@@ -31,6 +31,11 @@ export const addCommentTool: ToolDefinition = {
       type: "comment.created",
       data: { id: created?.id, ticketId: input.ticket_id, agentId, body: input.body },
     });
+    await publish?.(
+      "comment.created",
+      { id: created?.id, ticketId: input.ticket_id, agentId, body: input.body },
+      reporterId
+    );
 
     return created;
   },

@@ -28,7 +28,6 @@ import {
   editComment,
   setTicketLabels,
 } from "@/lib/actions";
-import { showXpToast } from "./xp-toast";
 import type {
   TicketDetail as TicketDetailData,
   TicketComment,
@@ -100,7 +99,6 @@ export function TicketDetail({
     startTransition(async () => {
       const res = await updateTicketDetails(ticket.id, patch);
       setError(res.ok ? null : res.error ?? "Save failed");
-      if (res.ok) showXpToast(res);
     });
   }
 

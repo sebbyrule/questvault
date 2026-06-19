@@ -21,9 +21,12 @@ Turborepo.
 ## 2. Current state (as of this handoff)
 
 - Branch `main`, latest feature commit `dfc2dca` (webhooks), pushed to `origin` (github `sebbyrule/questvault`).
-- `pnpm typecheck` → **9/9 green**. `pnpm test` → **green repo-wide** (gamification 22,
-  web 13, db 8, ai 2, mcp-server 5). Web production build clean. **DB has 8 migrations**
-  (0006 = `agent_tokens`, 0007 = `webhooks` + `webhook_deliveries`); re-run `pnpm db:migrate`.
+  **Two unmerged feature branches** carry the event-bus work (§11): `feat/event-bus-worker`
+  (Inc 1, fast-forward-merged into `main` locally, unpushed) and `feat/xp-worker` (Inc 2).
+- `pnpm typecheck` → **11/11 green** (added `@questvault/events` + `services/workers`).
+  `pnpm test` → **green repo-wide**. Web production build clean. **DB has 9 migrations**
+  (0007 = `webhooks` + `webhook_deliveries`, 0008 = `processed_events` worker idempotency
+  ledger); re-run `pnpm install` && `pnpm db:migrate`.
 - **Since the previous handoff** three features + a test pass landed on `main` (§4):
   the **gamification XP loop** (`7f04f12`) — ticket actions award XP for real —
   **first-run admin registration** (`e299c6f`) — real sign-up with hashed
@@ -70,9 +73,10 @@ packages/events     ★ Redis event bus. publishEvent (best-effort XADD to the
 packages/api-client    Shared Zod request schemas.
 packages/storage       Local/S3 file storage.
 services/api        Express REST + SSE (:3001). Routes: tickets, ai/chat.
-services/workers    Background worker — the single event-bus consumer. Reacts to
-                    domain events (awards XP / dispatches webhooks — see §11).
-                    `tsx watch src/index.ts`, started by `pnpm dev`.
+services/workers    Background worker — the single event-bus consumer. Awards XP
+                    idempotently (handlers/xp.ts → `awardXpForEvent`, guarded by
+                    `processed_events`) on ticket.created/closed + pr.linked; webhook
+                    dispatch moves here in Inc 3. `tsx watch src/index.ts`, in `pnpm dev`.
 services/ai-coach   Empty dir (planned).
 apps/mobile         Empty (planned).
 ```
@@ -320,12 +324,11 @@ pnpm test                                   # green (gamification 22, web 13, db
   (needs stored payloads); Express-API webhook emit; agent-token extras (per-token
   reporter identities / distinct agent users, expiry UI, usage metrics, rotating
   the legacy `MCP_AGENT_SECRET` out); Claude Code integration tests.
-- **Phase 2:** XP is now awarded synchronously in the web server actions
-  (`lib/xp.ts`). Remaining: move awarding to an event-bus worker
-  (`services/workers`) so coach/MCP changes also mint XP; wire anti-gaming guards
-  (the velocity check in `constants.ts` is still unwired); real-time WebSocket
-  updates. Also: `sprint_completed` / `review_submitted` rules exist but have no
-  triggering surface yet.
+- **Phase 2:** XP awarding now runs in the **event-bus worker** (`services/workers`,
+  see §11 Inc 2) — web/coach/MCP mutations all mint XP idempotently. Remaining:
+  wire anti-gaming guards (the velocity check in `constants.ts` is still unwired);
+  real-time WebSocket updates (the synchronous XP toast was dropped); triggering
+  surfaces for the `sprint_completed` / `review_submitted` rules.
 - **Phase 3:** proactive coach nudges (scheduled `services/ai-coach`). Semantic
   search shipped (`f9f28ab`) — remaining there: a GIN index for the full-text
   fallback, and verifying the semantic path against a real 1536-dim embedding
@@ -370,14 +373,27 @@ Three increments (each its own verify→merge):
   **Verified live** against Docker Redis: a single consumer reads all published
   events exactly once with zero pending; publish degrades to a no-op (returns
   `null`, logs once, never throws) when Redis is down.
-- **Inc 2 — move XP awarding to the worker (next).** Relocate the `awardXp` glue
-  out of `apps/web/lib/xp.ts` into a web-free, DB-importable module (mirror the
-  `webhooks.ts` "takes the `db` handle" pattern) and make it **idempotent** keyed
-  by `eventId` (migration `0008`: `xp_events.event_id` unique + a `processed_events`
-  guard). Publishers (web actions + MCP tools) emit `ticket.created` /
-  `ticket.closed` / `pr.linked`; remove the inline `awardXp` calls. **Decided
-  tradeoff:** drop the synchronous "+N XP" `<XpToaster>` return — totals surface
-  via `revalidatePath`; real-time WS push is the proper future fix.
+- **Inc 2 — move XP awarding to the worker (DONE on this branch).** The award
+  glue moved out of `apps/web/lib/xp.ts` (deleted) into
+  `services/workers/src/handlers/xp.ts` (`awardXpForEvent`), which the worker runs.
+  It is **idempotent**: the whole award runs in one transaction that first claims
+  the event's id in `processed_events` (migration `0008`); a redelivered event is a
+  no-op. Publishers now emit domain events instead of awarding inline:
+    - **web** (`lib/actions.ts`) — `publishEvent` for created/updated/closed/comment/
+      pr; `awardXp`/`tryAward` removed; actions return `{ ok }` only.
+    - **MCP tools + coach** — tools gained an injected `ctx.publish` (the same DI
+      pattern as `ctx.embed`, so `@questvault/tools` stays pure / web-bundle-safe via
+      a type-only `EventType` import). The MCP HTTP server and the coach inject it,
+      so **agent/coach mutations finally mint XP** (the headline win).
+    - Tools still call `dispatchWebhooks` inline — that moves to the worker in Inc 3.
+  **Tradeoff taken:** the synchronous "+N XP" `<XpToaster>` is **removed**
+  (component + all call sites + layout mount); totals surface via `revalidatePath`,
+  real-time WS push is future work.
+  **Verified live** (Docker Redis + Postgres): a `ticket.closed` event awarded
+  +50 XP to the assignee and a redelivery of the same `eventId` was skipped
+  (idempotent); closing a (backdated) ticket through the **MCP `close_ticket` tool**
+  minted +50 XP for its assignee; the anti-gaming quality gate correctly zeroed a
+  freshly-created ticket. `typecheck` 11/11, tests green, web production build clean.
 - **Inc 3 — route webhooks through the worker + retry/backoff.** Replace the
   inline `dispatchWebhooks` calls (web + MCP tools — restoring `@questvault/tools`
   purity) with event publishes; the worker dispatches with exponential-backoff

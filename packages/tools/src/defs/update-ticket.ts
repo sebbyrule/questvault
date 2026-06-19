@@ -29,7 +29,7 @@ export const updateTicketTool: ToolDefinition = {
   description:
     "Partially update a ticket's fields (title, description, status, priority, assignee_id, sprint_id, story_points, due_date, pr_url). Records one change-history entry per modified field.",
   inputSchema: schema,
-  async execute(raw, { db, agentId }) {
+  async execute(raw, { db, agentId, reporterId, publish }) {
     const input = schema.parse(raw);
 
     const current = await db.query.tickets.findFirst({
@@ -115,8 +115,19 @@ export const updateTicketTool: ToolDefinition = {
         projectId: updated.projectId, status: updated.status, priority: updated.priority,
       };
       await dispatchWebhooks(db, { type: "ticket.updated", data });
+      await publish?.("ticket.updated", data, reporterId);
       if (updated.status === "done" && current.status !== "done") {
         await dispatchWebhooks(db, { type: "ticket.closed", data });
+        // XP for the close: credit the assignee, else the acting agent.
+        await publish?.(
+          "ticket.closed",
+          {
+            ...data, assigneeId: updated.assigneeId,
+            openedAt: current.createdAt.toISOString(),
+            closedAt: (set.closedAt instanceof Date ? set.closedAt : new Date()).toISOString(),
+          },
+          reporterId
+        );
       }
     }
 

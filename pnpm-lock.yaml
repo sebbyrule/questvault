@@ -38,6 +38,9 @@ importers:
       '@questvault/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@questvault/events':
+        specifier: workspace:*
+        version: link:../../packages/events
       '@questvault/gamification':
         specifier: workspace:*
         version: link:../../packages/gamification
@@ -126,6 +129,9 @@ importers:
       '@questvault/db':
         specifier: workspace:*
         version: link:../db
+      '@questvault/events':
+        specifier: workspace:*
+        version: link:../events
       '@questvault/tools':
         specifier: workspace:*
         version: link:../tools
@@ -230,6 +236,9 @@ importers:
       '@questvault/db':
         specifier: workspace:*
         version: link:../db
+      '@questvault/events':
+        specifier: workspace:*
+        version: link:../events
       '@questvault/tools':
         specifier: workspace:*
         version: link:../tools
@@ -274,6 +283,9 @@ importers:
       '@questvault/db':
         specifier: workspace:*
         version: link:../db
+      '@questvault/events':
+        specifier: workspace:*
+        version: link:../events
       zod:
         specifier: ^3.23.0
         version: 3.25.76
@@ -342,9 +354,15 @@ importers:
 
   services/workers:
     dependencies:
+      '@questvault/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@questvault/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@questvault/gamification':
+        specifier: workspace:*
+        version: link:../../packages/gamification
     devDependencies:
       '@types/node':
         specifier: ^20.0.0

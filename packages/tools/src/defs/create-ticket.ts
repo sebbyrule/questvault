@@ -20,7 +20,7 @@ export const createTicketTool: ToolDefinition = {
   description:
     "Create a new ticket in a project. Required: project_id, title. Optional: description, priority, assignee_id, sprint_id, story_points, labels, parent_id.",
   inputSchema: schema,
-  async execute(raw, { db, reporterId }) {
+  async execute(raw, { db, reporterId, publish }) {
     const input = schema.parse(raw);
 
     // Auto-increment the per-project ticket number.
@@ -63,6 +63,18 @@ export const createTicketTool: ToolDefinition = {
         projectId: created.projectId, status: created.status, priority: created.priority,
       },
     });
+
+    // Emit a domain event so the worker awards XP (reporter = the agent).
+    await publish?.(
+      "ticket.created",
+      {
+        id: created.id, number: created.number, title: created.title,
+        description: created.description, projectId: created.projectId,
+        status: created.status, priority: created.priority,
+        reporterId, assigneeId: created.assigneeId,
+      },
+      reporterId
+    );
 
     return created;
   },

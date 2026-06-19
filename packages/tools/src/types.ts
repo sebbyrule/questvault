@@ -1,5 +1,19 @@
 import type { z } from "zod";
 import type { Database } from "@questvault/db";
+// Type-only: the EventType union is erased at build, so consumers of `tools`
+// (incl. the web bundle) never pull the event bus' ioredis through this import.
+import type { EventType } from "@questvault/events";
+
+/**
+ * Publish a domain event to the bus. Injected by surfaces that have the event
+ * bus (the MCP HTTP server, the coach) — mirroring how `embed` is injected to
+ * avoid a tools→ai cycle. When absent, tools simply don't publish.
+ */
+export type PublishFn = (
+  type: EventType,
+  payload: Record<string, unknown>,
+  actorId: string | null
+) => Promise<void>;
 
 /**
  * Execution context passed to every tool. Both surfaces (the MCP server for
@@ -23,6 +37,12 @@ export interface ToolContext {
    * unavailable — tools that use it must fall back to non-vector behaviour.
    */
   embed?: (text: string) => Promise<number[] | null>;
+  /**
+   * Optional event-bus publisher (injected by surfaces that have it). Lets
+   * agent/coach mutations emit domain events so the worker awards XP and (later)
+   * dispatches webhooks. Best-effort: implementations never throw.
+   */
+  publish?: PublishFn;
 }
 
 /**

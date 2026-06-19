@@ -9,7 +9,6 @@ import { auth } from "@/lib/auth";
 import { getSessionAccount } from "@/lib/queries";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CoachPanel } from "@/components/coach-panel";
-import { XpToaster } from "@/components/xp-toast";
 
 export default async function AppLayout({
   children,
@@ -36,7 +35,6 @@ export default async function AppLayout({
       <AppSidebar user={user} role={account?.role ?? null} />
       <main className="flex-1 overflow-y-auto">{children}</main>
       <CoachPanel />
-      <XpToaster />
     </div>
   );
 }

@@ -6,6 +6,7 @@
  * attributed to the Auth.js session user via getCurrentUser().
  */
 import { db, eq, and, max, inArray, dispatchWebhooks, type WebhookEvent } from "@questvault/db";
+import { publishEvent, type EventType } from "@questvault/events";
 import {
   tickets,
   comments,
@@ -21,16 +22,24 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser } from "./queries";
 import { uniqueProjectSlug } from "./slug";
-import { awardXp, type AwardXpOpts, type AwardResult } from "./xp";
 import { embedTicketText, searchTickets, type SearchResult } from "./search";
 
-/** Award XP without ever letting a gamification failure break the mutation. */
-async function tryAward(opts: AwardXpOpts): Promise<AwardResult> {
+/**
+ * Emit a domain event to the bus so the worker awards XP (and, from Inc 3,
+ * dispatches webhooks). Best-effort: publishEvent already swallows a down bus,
+ * but wrap defensively so a mutation never breaks. XP is therefore awarded
+ * asynchronously — totals surface on the next render via revalidatePath (the
+ * old synchronous "+N XP" toast is gone; real-time push is future work).
+ */
+async function tryPublish(
+  type: EventType,
+  payload: Record<string, unknown>,
+  actorId: string | null
+): Promise<void> {
   try {
-    return await awardXp(opts);
+    await publishEvent(type, payload, actorId);
   } catch (err) {
-    console.error("[xp] award failed:", err);
-    return { xpAwarded: 0, badges: [] };
+    console.error("[events] publish failed:", err);
   }
 }
 
@@ -77,40 +86,33 @@ export async function moveTicket(ticketId: string, status: string) {
 
   await db.update(tickets).set(set).where(eq(tickets.id, ticketId));
 
-  // Award ticket_closed on the transition INTO done (credit the assignee if
-  // any, else the actor performing the move).
-  let award: AwardResult = { xpAwarded: 0, badges: [] };
-  if (parsed.data === "done" && current.status !== "done") {
-    const actor = await getCurrentUser();
-    const earnerId = current.assigneeId ?? actor?.id;
-    if (earnerId) {
-      award = await tryAward({
-        userId: earnerId,
-        action: "ticket_closed",
-        input: {
-          ticketId,
-          priority: current.priority,
-          openedAt: current.createdAt,
-          closedAt: now,
-        },
-        entityId: ticketId,
-        entityType: "ticket",
-      });
-    }
-  }
+  const actor = await getCurrentUser();
+  const closing = parsed.data === "done" && current.status !== "done";
 
   const hookData = {
     id: ticketId, number: current.number, title: current.title,
     projectId: current.projectId, status: parsed.data, priority: current.priority,
   };
   await tryDispatch({ type: "ticket.updated", data: hookData });
-  if (parsed.data === "done" && current.status !== "done") {
+  await tryPublish("ticket.updated", hookData, actor?.id ?? null);
+  if (closing) {
     await tryDispatch({ type: "ticket.closed", data: hookData });
+    // The worker credits XP to the assignee (else the actor) on this event.
+    await tryPublish(
+      "ticket.closed",
+      {
+        ...hookData,
+        assigneeId: current.assigneeId,
+        openedAt: current.createdAt.toISOString(),
+        closedAt: now.toISOString(),
+      },
+      actor?.id ?? null
+    );
   }
 
   revalidatePath("/board");
   revalidatePath("/dashboard");
-  return { ok: true, ...award };
+  return { ok: true };
 }
 
 const createSchema = z.object({
@@ -150,37 +152,23 @@ export async function createTicket(input: z.input<typeof createSchema>) {
     })
     .returning({ id: tickets.id });
 
-  // Award ticket_created XP to the reporter. Plain creates fail the rule's
-  // quality gate (no assignee) → 0 XP by design, but the first-ticket badge
-  // still unlocks here.
-  const award = created
-    ? await tryAward({
-        userId: reporterId,
-        action: "ticket_created",
-        input: {
-          ticketId: created.id,
-          title,
-          description: description ?? null,
-          assigneeId: null,
-        },
-        entityId: created.id,
-        entityType: "ticket",
-      })
-    : { xpAwarded: 0, badges: [] };
-
   // Best-effort semantic-search embedding (no-op when embeddings are disabled).
   if (created) await embedTicketText(created.id, title, description ?? null);
 
   if (created) {
-    await tryDispatch({
-      type: "ticket.created",
-      data: { id: created.id, number, title, status: "backlog", priority, projectId },
-    });
+    const hookData = { id: created.id, number, title, status: "backlog", priority, projectId };
+    await tryDispatch({ type: "ticket.created", data: hookData });
+    // The worker awards ticket_created XP / first-ticket badge to the reporter.
+    await tryPublish(
+      "ticket.created",
+      { ...hookData, description: description ?? null, reporterId, assigneeId: null },
+      reporterId
+    );
   }
 
   revalidatePath("/board");
   revalidatePath("/dashboard");
-  return { ok: true, ...award };
+  return { ok: true };
 }
 
 /** Project-scoped ticket search (semantic with full-text fallback). */
@@ -353,46 +341,6 @@ export async function updateTicketDetails(ticketId: string, patch: EditTicketInp
     );
   });
 
-  // ── XP awards (best-effort, after the core update has committed) ──────────
-  let xpAwarded = 0;
-  const earnedBadges: AwardResult["badges"] = [];
-
-  // Closed: transition INTO done. Credit the (effective) assignee, else actor.
-  if (input.status === "done" && current.status !== "done") {
-    const effectiveAssignee =
-      input.assigneeId !== undefined ? input.assigneeId : current.assigneeId;
-    const earnerId = effectiveAssignee ?? actor?.id;
-    if (earnerId) {
-      const a = await tryAward({
-        userId: earnerId,
-        action: "ticket_closed",
-        input: {
-          ticketId,
-          priority: input.priority ?? current.priority,
-          openedAt: current.createdAt,
-          closedAt: new Date(),
-        },
-        entityId: ticketId,
-        entityType: "ticket",
-      });
-      xpAwarded += a.xpAwarded;
-      earnedBadges.push(...a.badges);
-    }
-  }
-
-  // PR linked: prUrl goes from empty → a url. Credit the actor.
-  if (input.prUrl && !current.prUrl && actor?.id) {
-    const a = await tryAward({
-      userId: actor.id,
-      action: "pr_linked",
-      input: { ticketId, prUrl: input.prUrl },
-      entityId: ticketId,
-      entityType: "pr",
-    });
-    xpAwarded += a.xpAwarded;
-    earnedBadges.push(...a.badges);
-  }
-
   // Re-embed when the searchable text (title/description) changed.
   if (set.title !== undefined || set.description !== undefined) {
     await embedTicketText(
@@ -402,6 +350,7 @@ export async function updateTicketDetails(ticketId: string, patch: EditTicketInp
     );
   }
 
+  // ── Domain events (best-effort). The worker awards XP for close / pr-linked. ──
   const hookData = {
     id: ticketId, number: current.number, projectId: current.projectId,
     title: input.title ?? current.title,
@@ -409,12 +358,31 @@ export async function updateTicketDetails(ticketId: string, patch: EditTicketInp
     priority: input.priority ?? current.priority,
   };
   await tryDispatch({ type: "ticket.updated", data: hookData });
+  await tryPublish("ticket.updated", hookData, actor?.id ?? null);
+
   if (input.status === "done" && current.status !== "done") {
     await tryDispatch({ type: "ticket.closed", data: hookData });
+    const effectiveAssignee =
+      input.assigneeId !== undefined ? input.assigneeId : current.assigneeId;
+    await tryPublish(
+      "ticket.closed",
+      {
+        ...hookData,
+        assigneeId: effectiveAssignee,
+        openedAt: current.createdAt.toISOString(),
+        closedAt: new Date().toISOString(),
+      },
+      actor?.id ?? null
+    );
+  }
+
+  // PR linked: prUrl goes from empty → a url. The worker credits the actor.
+  if (input.prUrl && !current.prUrl && actor?.id) {
+    await tryPublish("pr.linked", { ticketId, prUrl: input.prUrl }, actor.id);
   }
 
   revalidateTicket(ticketId);
-  return { ok: true, xpAwarded, badges: earnedBadges };
+  return { ok: true };
 }
 
 // ─── Projects ─────────────────────────────────────────────────────────────────
@@ -490,10 +458,9 @@ export async function addComment(ticketId: string, body: string) {
     .returning({ id: comments.id });
 
   if (created) {
-    await tryDispatch({
-      type: "comment.created",
-      data: { id: created.id, ticketId, authorId: user.id, body: parsed.data.body },
-    });
+    const data = { id: created.id, ticketId, authorId: user.id, body: parsed.data.body };
+    await tryDispatch({ type: "comment.created", data });
+    await tryPublish("comment.created", data, user.id);
   }
 
   revalidateTicket(ticketId);

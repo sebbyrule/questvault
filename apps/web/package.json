@@ -17,6 +17,7 @@
     "@dnd-kit/utilities": "^3.2.0",
     "@questvault/api-client": "workspace:*",
     "@questvault/db": "workspace:*",
+    "@questvault/events": "workspace:*",
     "@questvault/gamification": "workspace:*",
     "@questvault/storage": "workspace:*",
     "@questvault/tools": "workspace:*",

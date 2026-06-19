@@ -13,6 +13,7 @@ import express from "express";
 import { timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { db, resolveAgentToken, embed } from "@questvault/db";
+import { publishEvent } from "@questvault/events";
 import type { ToolContext } from "@questvault/tools";
 import { createServer } from "./index.js";
 
@@ -73,6 +74,10 @@ app.post("/mcp", async (req, res) => {
     agentId: principal.agentId,
     reporterId: principal.reporterId,
     embed, // lets search_tickets do semantic search (no-op when disabled)
+    // Emit domain events so the worker awards XP for agent mutations.
+    publish: async (type, payload, actorId) => {
+      await publishEvent(type, payload, actorId);
+    },
   };
 
   // Per-agent scopes: "*" registers all tools, else only the named ones.

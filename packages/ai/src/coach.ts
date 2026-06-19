@@ -16,6 +16,7 @@ import {
 } from "./client.js";
 import { toToolSpecs } from "./tool-schema.js";
 import { getAppSettings, embed, type Database } from "@questvault/db";
+import { publishEvent } from "@questvault/events";
 import { allTools, toolsByName, type ToolContext } from "@questvault/tools";
 import { buildCoachContext } from "./context.js";
 
@@ -77,6 +78,10 @@ ${context}
       process.env.MCP_AGENT_REPORTER_ID ?? "00000000-0000-0000-0000-000000000000",
     // Lets the coach's search_tickets do semantic search (no-op when disabled).
     embed,
+    // Emit domain events so the worker awards XP for coach mutations.
+    publish: async (type, payload, actorId) => {
+      await publishEvent(type, payload, actorId);
+    },
   };
 
   const execute = async (name: string, args: unknown): Promise<unknown> => {

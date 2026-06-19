@@ -13,12 +13,15 @@ export const closeTicketTool: ToolDefinition = {
   description:
     "Transition a ticket to Done status. Accepts an optional resolution_note, recorded as an agent-authored comment.",
   inputSchema: schema,
-  async execute(raw, { db, agentId }) {
+  async execute(raw, { db, agentId, reporterId, publish }) {
     const input = schema.parse(raw);
 
     const ticket = await db.query.tickets.findFirst({
       where: eq(tickets.id, input.ticket_id),
-      columns: { id: true, status: true, projectId: true },
+      columns: {
+        id: true, number: true, title: true, status: true, projectId: true,
+        priority: true, assigneeId: true, createdAt: true,
+      },
     });
     if (!ticket) throw new Error(`Ticket ${input.ticket_id} not found`);
     if (ticket.status === "done" || ticket.status === "archived") {
@@ -45,6 +48,19 @@ export const closeTicketTool: ToolDefinition = {
       type: "ticket.closed",
       data: { id: input.ticket_id, projectId: ticket.projectId, status: "done" },
     });
+
+    // Emit a domain event so the worker awards XP (credits the assignee, else
+    // the acting agent).
+    await publish?.(
+      "ticket.closed",
+      {
+        id: input.ticket_id, number: ticket.number, title: ticket.title,
+        projectId: ticket.projectId, priority: ticket.priority,
+        assigneeId: ticket.assigneeId,
+        openedAt: ticket.createdAt.toISOString(), closedAt: now.toISOString(),
+      },
+      reporterId
+    );
 
     return { ticketId: input.ticket_id, status: "done", closedAt: now.toISOString() };
   },

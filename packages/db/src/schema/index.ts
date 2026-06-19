@@ -8,5 +8,6 @@ export * from "./webhooks";
 export * from "./projects";
 export * from "./tickets";
 export * from "./gamification";
+export * from "./processed-events";
 export * from "./settings";
 export * from "./templates";

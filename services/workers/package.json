@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@questvault/events": "workspace:*"
+    "@questvault/db": "workspace:*",
+    "@questvault/events": "workspace:*",
+    "@questvault/gamification": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

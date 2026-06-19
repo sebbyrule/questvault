@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@questvault/db": "workspace:*",
+    "@questvault/events": "workspace:*",
     "zod": "^3.23.0"
   },
   "devDependencies": {

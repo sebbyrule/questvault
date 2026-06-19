@@ -4,7 +4,6 @@
 import { useState, useTransition } from "react";
 import { clsx } from "clsx";
 import { createTicket } from "@/lib/actions";
-import { showXpToast } from "./xp-toast";
 import type { TicketPriority } from "@/lib/format";
 
 const PRIORITIES: TicketPriority[] = ["p0", "p1", "p2", "p3"];
@@ -34,7 +33,6 @@ export function NewTicketButton({ projectId }: { projectId: string }) {
       if (res?.ok) {
         reset();
         setOpen(false);
-        showXpToast(res);
       } else {
         setError(res?.error ?? "Something went wrong");
       }
