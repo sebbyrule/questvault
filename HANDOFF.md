@@ -73,7 +73,8 @@ packages/events     ★ Redis event bus. publishEvent (best-effort XADD to the
                     consumer: services/workers.
 packages/api-client    Shared Zod request schemas.
 packages/storage       Local/S3 file storage.
-services/api        Express REST + SSE (:3001). Routes: tickets, ai/chat.
+services/api        Express REST + SSE (:3001). Routes: tickets, ai/chat. Ticket
+                    create/update publish domain events (XP + webhooks via the worker).
 services/workers    Background worker — the single event-bus consumer. Awards XP
                     idempotently (handlers/xp.ts → `awardXpForEvent`, guarded by
                     `processed_events`) on ticket.created/closed + pr.linked, and
@@ -322,9 +323,9 @@ pnpm test                                   # green (gamification 22, web 13, db
 ## 9. What's next (not done)
 
 - **Phase 4 is done** (scoped tokens `d01066e`, webhooks `dfc2dca`; webhook
-  **retry/backoff + manual redelivery** landed in §11 Inc 3). Remaining
-  follow-ups: Express-API webhook/XP emit (the API mutations don't publish events
-  yet — only web/coach/MCP do); agent-token extras (per-token reporter identities /
+  **retry/backoff + manual redelivery** landed in §11 Inc 3). The Express API now
+  emits events too (§11 follow-on), so all four surfaces mint XP + webhooks.
+  Remaining follow-ups: agent-token extras (per-token reporter identities /
   distinct agent users, expiry UI, usage metrics, rotating the legacy
   `MCP_AGENT_SECRET` out); Claude Code integration tests.
 - **Phase 2:** XP awarding now runs in the **event-bus worker** (`services/workers`,
@@ -419,6 +420,18 @@ Three increments (each its own verify→merge):
   **Tradeoff:** webhooks now require the event bus (a down Redis means no webhook
   *and* no XP for that mutation) — the intended "all mutations emit an event"
   architecture, vs. the previous synchronous best-effort dispatch.
+
+- **Follow-on — Express API emits events (DONE on this branch).** The API's
+  ticket `POST`/`PATCH` (`services/api/src/routes/tickets.ts`) published nothing,
+  so API-driven changes minted no XP and fired no webhooks (the only surface that
+  didn't). They now publish `ticket.created` / `ticket.updated` / `ticket.closed`
+  / `pr.linked`. Also **fixed a latent bug**: the dev/agent tokens set
+  `req.auth.userId` to a label (`dev-<email>` / `mcp-agent`), not a UUID, but
+  `POST` inserted it straight into `reporterId` (a uuid FK) — it would throw. New
+  `services/api/src/resolve-user.ts` (`resolveUserId`) maps the principal to a
+  real `users.id` (agent → seeded agent user; else by email; JWT UUID passthrough),
+  used for `reporterId` and the event actor. **Verified live**: `curl` create with
+  `dev:alice` → 201 + worker awarded +6 XP; `PATCH`→done emitted updated+closed.
 
 Note: the worker process on Windows is the `node --require …tsx … src/index.ts`
 child, **not** the `tsx` CLI wrapper — kill the child (match on `--require` +

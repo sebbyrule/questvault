@@ -308,6 +308,9 @@ importers:
       '@questvault/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@questvault/events':
+        specifier: workspace:*
+        version: link:../../packages/events
       '@questvault/gamification':
         specifier: workspace:*
         version: link:../../packages/gamification

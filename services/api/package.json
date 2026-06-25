@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@questvault/db": "workspace:*",
+    "@questvault/events": "workspace:*",
     "@questvault/gamification": "workspace:*",
     "@questvault/ai": "workspace:*",
     "@questvault/mcp-server": "workspace:*",
