@@ -71,6 +71,13 @@
       "when": 1781865341980,
       "tag": "0009_clever_drax",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782703600971,
+      "tag": "0010_remarkable_skaar",
+      "breakpoints": true
     }
   ]
 }

@@ -17,6 +17,7 @@ import {
   agentTokens,
   webhooks,
   webhookDeliveries,
+  appSettings,
 } from "@questvault/db/schema";
 import { auth } from "./auth";
 import { hashToken, isInviteUsable } from "./auth-rules";
@@ -582,4 +583,22 @@ export async function getProjectSprints(projectId: string): Promise<SprintOption
     .from(sprints)
     .where(and(eq(sprints.projectId, projectId), ne(sprints.status, "cancelled")))
     .orderBy(desc(sprints.createdAt));
+}
+
+// ─── Onboarding ─────────────────────────────────────────────────────────────
+
+/** Whether an admin has completed (or skipped) first-run onboarding. */
+export async function isOnboardingComplete(): Promise<boolean> {
+  const [row] = await db
+    .select({ at: appSettings.onboardingCompletedAt })
+    .from(appSettings)
+    .where(eq(appSettings.id, "workspace"))
+    .limit(1);
+  return !!row?.at;
+}
+
+/** Whether the workspace has at least one project (drives the onboarding step). */
+export async function hasAnyProject(): Promise<boolean> {
+  const [row] = await db.select({ id: projects.id }).from(projects).limit(1);
+  return !!row;
 }

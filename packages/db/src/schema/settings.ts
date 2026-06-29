@@ -21,6 +21,9 @@ export const appSettings = pgTable("app_settings", {
   // Allowlist of tool names the coach may call; null = all tools allowed.
   enabledTools: jsonb<string[] | null>("enabled_tools"),
 
+  // First-run setup wizard: null until an admin completes (or skips) onboarding.
+  onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

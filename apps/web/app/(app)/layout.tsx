@@ -6,7 +6,8 @@
 // pass the current user to the sidebar (and as defense-in-depth).
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getSessionAccount } from "@/lib/queries";
+import { getSessionAccount, isOnboardingComplete } from "@/lib/queries";
+import { isAdminRole } from "@/lib/roles";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CoachPanel } from "@/components/coach-panel";
 
@@ -24,6 +25,12 @@ export default async function AppLayout({
   // Action re-render) and must NOT bounce an otherwise-valid session.
   const account = await getSessionAccount();
   if (account && !account.isActive) redirect("/auth/login");
+
+  // First-run: send the admin through onboarding until it's completed/skipped.
+  // (/onboarding lives outside this route group, so this can't loop.)
+  if (account && isAdminRole(account.role) && !(await isOnboardingComplete())) {
+    redirect("/onboarding");
+  }
 
   const user = {
     name: session.user.name ?? session.user.email ?? "User",

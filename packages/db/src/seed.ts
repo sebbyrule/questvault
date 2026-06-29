@@ -11,7 +11,7 @@ import "./load-env.js"; // must run before ./client.js reads DATABASE_URL
 import { db } from "./client.js";
 import {
   users, projects, projectMembers, sprints,
-  tickets, labels, ticketLabels, badges, userBadges, agentTokens,
+  tickets, labels, ticketLabels, badges, userBadges, agentTokens, appSettings,
 } from "./schema/index.js";
 import { hashAgentToken } from "./agents.js";
 
@@ -287,6 +287,21 @@ async function seed() {
     reporterId: agentUser,
   });
   console.log("  ✓ Example agent token seeded (read-only)");
+
+  // ── Workspace settings ────────────────────────────────────────────────────
+  // The seeded workspace is already set up, so mark onboarding complete (the
+  // first-run wizard is only for a fresh, empty install). Reset to a clean,
+  // deterministic baseline (LLM config falls back to env).
+  const onboardedSettings = {
+    llmProvider: null, llmModel: null, llmBaseUrl: null, llmApiKey: null,
+    skillsMd: null, workingDir: null, enabledTools: null,
+    onboardingCompletedAt: new Date(),
+  };
+  await db
+    .insert(appSettings)
+    .values({ id: "workspace", ...onboardedSettings })
+    .onConflictDoUpdate({ target: appSettings.id, set: onboardedSettings });
+  console.log("  ✓ Workspace settings reset; onboarding marked complete");
 
   console.log("\n✅ Seed complete!");
   console.log("\nDev login credentials:");

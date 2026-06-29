@@ -9,7 +9,7 @@
 import type { NextAuthConfig } from "next-auth";
 
 // Route prefixes that require an authenticated session.
-const PROTECTED_PREFIXES = ["/dashboard", "/board", "/projects"];
+const PROTECTED_PREFIXES = ["/dashboard", "/board", "/projects", "/onboarding"];
 
 export const authConfig = {
   secret: process.env.AUTH_SECRET,
