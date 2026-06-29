@@ -85,6 +85,30 @@ async function handleEvent(event: DomainEvent): Promise<void> {
       }
       break;
     }
+    case "sprint.completed": {
+      // Fan out sprint_completed XP to each contributor. Idempotency key is
+      // per-recipient (<eventId>:<userId>) so redelivery is still exactly-once.
+      const ids = Array.isArray(p.contributorIds) ? (p.contributorIds as string[]) : [];
+      let total = 0;
+      const badges: string[] = [];
+      for (const uid of ids) {
+        const s = await awardXpForEvent(`${event.eventId}:${uid}`, {
+          userId: uid,
+          action: "sprint_completed",
+          input: {
+            sprintId: p.sprintId,
+            committedPoints: p.committedPoints,
+            deliveredPoints: p.deliveredPoints,
+          },
+          entityId: String(p.sprintId),
+          entityType: "sprint",
+        });
+        total += s.xpAwarded;
+        badges.push(...s.badges);
+      }
+      summary = { skipped: false, xpAwarded: total, badges };
+      break;
+    }
     default:
       break; // ticket.updated / comment.created mint no XP (webhook-only)
   }

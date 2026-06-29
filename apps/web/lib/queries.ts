@@ -613,3 +613,51 @@ export async function getUsablePasswordReset(rawToken: string) {
   if (!row) return null;
   return isResetUsable(row) ? row : null;
 }
+
+// ─── Sprint analytics ───────────────────────────────────────────────────────
+
+export type SprintAnalytics = {
+  id: string;
+  name: string;
+  status: string;
+  committed: number; // story points
+  delivered: number; // story points of done tickets
+  total: number; // ticket count
+  done: number; // done ticket count
+};
+
+/** Per-sprint committed/delivered points + ticket counts for a project. */
+export async function getSprintAnalytics(projectId: string): Promise<SprintAnalytics[]> {
+  const sps = await db
+    .select({ id: sprints.id, name: sprints.name, status: sprints.status, createdAt: sprints.createdAt })
+    .from(sprints)
+    .where(eq(sprints.projectId, projectId))
+    .orderBy(asc(sprints.createdAt));
+  if (sps.length === 0) return [];
+
+  const tk = await db
+    .select({ sprintId: tickets.sprintId, status: tickets.status, points: tickets.storyPoints })
+    .from(tickets)
+    .where(eq(tickets.projectId, projectId));
+
+  const agg = new Map<string, { committed: number; delivered: number; total: number; done: number }>();
+  for (const t of tk) {
+    if (!t.sprintId) continue;
+    const a = agg.get(t.sprintId) ?? { committed: 0, delivered: 0, total: 0, done: 0 };
+    const p = t.points ?? 0;
+    a.committed += p;
+    a.total += 1;
+    if (t.status === "done") {
+      a.delivered += p;
+      a.done += 1;
+    }
+    agg.set(t.sprintId, a);
+  }
+
+  return sps.map((s) => ({
+    id: s.id,
+    name: s.name,
+    status: s.status,
+    ...(agg.get(s.id) ?? { committed: 0, delivered: 0, total: 0, done: 0 }),
+  }));
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "processed_events" ALTER COLUMN "event_id" SET DATA TYPE text USING "event_id"::text;

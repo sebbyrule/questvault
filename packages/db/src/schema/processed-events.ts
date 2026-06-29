@@ -1,4 +1,4 @@
-import { pgTable, uuid, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
 
 /**
  * Idempotency ledger for the background worker. The event bus is at-least-once,
@@ -9,7 +9,9 @@ import { pgTable, uuid, timestamp } from "drizzle-orm/pg-core";
  */
 export const processedEvents = pgTable("processed_events", {
   id: uuid("id").primaryKey().defaultRandom(),
-  eventId: uuid("event_id").notNull().unique(),
+  // Text (not uuid) so fan-out side effects can use composite keys, e.g.
+  // `<eventId>:<userId>` when one event awards several users (sprint completion).
+  eventId: text("event_id").notNull().unique(),
   processedAt: timestamp("processed_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

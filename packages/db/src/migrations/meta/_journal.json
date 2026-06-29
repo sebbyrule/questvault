@@ -85,6 +85,13 @@
       "when": 1782704378765,
       "tag": "0011_yummy_iron_monger",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782705766741,
+      "tag": "0012_grey_purple_man",
+      "breakpoints": true
     }
   ]
 }

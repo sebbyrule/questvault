@@ -14,6 +14,7 @@ export const EVENT_TYPES = [
   "ticket.closed",
   "comment.created",
   "pr.linked",
+  "sprint.completed",
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];
