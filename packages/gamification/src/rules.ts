@@ -5,6 +5,8 @@ import {
   STREAK_MULTIPLIER_PER_DAY,
   STREAK_MULTIPLIER_MAX,
   MIN_TICKET_OPEN_MINUTES,
+  VELOCITY_ANOMALY_MULTIPLIER,
+  VELOCITY_MIN_DAILY_CLOSES,
 } from "./constants";
 
 // ─── Shared Types ─────────────────────────────────────────────────────────────
@@ -50,6 +52,31 @@ function streakMultiplier(baseXp: number, ctx: GuardContext): number {
   );
   // Floor so streaks never over-award XP (anti-gaming).
   return Math.floor(baseXp * (1 + multiplier));
+}
+
+/**
+ * Anti-gaming velocity check. `ctx.rollingDailyCloses` is the user's per-day
+ * close count over the trailing VELOCITY_ROLLING_DAYS window, oldest→newest,
+ * with the last element being today's closes so far (already-awarded). Blocks
+ * the close when today (incl. this one) exceeds both the absolute floor and the
+ * personal rolling average × the anomaly multiplier. Unlike the daily cap, this
+ * counts closes across ALL priorities, catching cross-bucket bursts. Pure.
+ */
+export function velocityGuard(_input: unknown, ctx: GuardContext): GuardResult {
+  const days = ctx.rollingDailyCloses;
+  if (days.length < 2) return { pass: true }; // not enough history to judge
+  const today = days[days.length - 1] ?? 0;
+  const prior = days.slice(0, -1);
+  const avg = prior.reduce((a, b) => a + b, 0) / prior.length;
+  if (avg <= 0) return { pass: true }; // no baseline to deviate from
+  const projected = today + 1; // include the close being evaluated
+  if (projected > VELOCITY_MIN_DAILY_CLOSES && projected > avg * VELOCITY_ANOMALY_MULTIPLIER) {
+    return {
+      pass: false,
+      reason: `Velocity anomaly: ${projected} closes today vs avg ${avg.toFixed(1)}/day`,
+    };
+  }
+  return { pass: true };
 }
 
 function dailyCapGuard(action: string) {
@@ -116,6 +143,7 @@ export const ticketClosedRule: XpRule<TicketClosedInput> = {
         ? "ticket_closed_p0_p1"
         : "ticket_closed_p2_p3"
     )(input, ctx),
+    velocityGuard,
   ],
   applyMultipliers: streakMultiplier,
 };

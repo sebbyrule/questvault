@@ -30,10 +30,14 @@ export const STREAK_MULTIPLIER_MAX     = 0.50;  // capped at +50%
 // Ticket must be open at least this long before close XP is awarded
 export const MIN_TICKET_OPEN_MINUTES = 60;
 
-// If user closes > (rolling_avg * VELOCITY_ANOMALY_MULTIPLIER) tickets in one day,
-// excess XP is held pending review
+// If a user closes > (rolling_avg * VELOCITY_ANOMALY_MULTIPLIER) tickets in one
+// day — across all priorities — the close is treated as anomalous. (The current
+// implementation blocks the XP; holding it pending review is future work.)
 export const VELOCITY_ANOMALY_MULTIPLIER = 3;
 export const VELOCITY_ROLLING_DAYS       = 14;
+// Absolute floor so low-volume users are never flagged: a day must reach at least
+// this many closes before the velocity ratio can trip.
+export const VELOCITY_MIN_DAILY_CLOSES   = 4;
 
 // ─── Level Formula ────────────────────────────────────────────────────────────
 // Level = floor(sqrt(xpTotal / 50))

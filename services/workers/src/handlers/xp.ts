@@ -19,6 +19,7 @@ import {
   gte,
   inArray,
   sum,
+  count,
   sql,
 } from "@questvault/db";
 import {
@@ -34,7 +35,11 @@ import {
   nextStreak,
   storedAction,
   utcMidnight,
+  VELOCITY_ROLLING_DAYS,
 } from "@questvault/gamification";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const CLOSE_ACTIONS = ["ticket_closed_p2_p3", "ticket_closed_p0_p1"] as const;
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -73,9 +78,42 @@ async function buildContext(
   return {
     userId,
     dailyXpByAction,
-    rollingDailyCloses: [], // velocity guard still unwired
+    rollingDailyCloses: await rollingDailyCloses(tx, userId),
     streakDays,
   };
+}
+
+/**
+ * The user's ticket-close count per UTC day over the trailing
+ * VELOCITY_ROLLING_DAYS window, oldest→newest (last = today so far). Feeds the
+ * anti-gaming velocity guard. Counts both priority buckets.
+ */
+async function rollingDailyCloses(tx: Tx, userId: string): Promise<number[]> {
+  const todayMid = utcMidnight(new Date());
+  const windowStart = new Date(todayMid.getTime() - (VELOCITY_ROLLING_DAYS - 1) * DAY_MS);
+
+  const rows = await tx
+    .select({
+      day: sql<string>`to_char(date_trunc('day', ${xpEvents.createdAt} AT TIME ZONE 'UTC'), 'YYYY-MM-DD')`,
+      c: count(),
+    })
+    .from(xpEvents)
+    .where(
+      and(
+        eq(xpEvents.userId, userId),
+        inArray(xpEvents.action, [...CLOSE_ACTIONS]),
+        gte(xpEvents.createdAt, windowStart)
+      )
+    )
+    .groupBy(sql`date_trunc('day', ${xpEvents.createdAt} AT TIME ZONE 'UTC')`);
+
+  const byDay = new Map(rows.map((r) => [r.day, Number(r.c)]));
+  const out: number[] = [];
+  for (let i = VELOCITY_ROLLING_DAYS - 1; i >= 0; i--) {
+    const key = new Date(todayMid.getTime() - i * DAY_MS).toISOString().slice(0, 10);
+    out.push(byDay.get(key) ?? 0);
+  }
+  return out;
 }
 
 /** Award the seeded milestone/streak badges idempotently; returns unlocked slugs. */

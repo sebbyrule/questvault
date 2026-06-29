@@ -4,6 +4,7 @@ import {
   ticketClosedRule,
   sprintCompletedRule,
   reviewSubmittedRule,
+  velocityGuard,
   type GuardContext,
 } from "./rules.js";
 
@@ -107,6 +108,40 @@ describe("ticketClosedRule", () => {
       closedAt: now,
     });
     expect(xp).toBeNull();
+  });
+});
+
+// ─── velocityGuard ──────────────────────────────────────────────────────────
+
+describe("velocityGuard", () => {
+  const ctx = (rollingDailyCloses: number[]): GuardContext => ({
+    userId: "u", dailyXpByAction: {}, rollingDailyCloses, streakDays: 0,
+  });
+
+  it("passes with insufficient history", () => {
+    expect(velocityGuard({}, ctx([])).pass).toBe(true);
+    expect(velocityGuard({}, ctx([5])).pass).toBe(true);
+  });
+
+  it("passes when there is no prior baseline (avg 0)", () => {
+    // 13 idle days then a burst today — no baseline, so not flagged.
+    expect(velocityGuard({}, ctx([0, 0, 0, 10])).pass).toBe(true);
+  });
+
+  it("blocks an anomalous spike vs the rolling average", () => {
+    // prior avg 1/day, today already 4 → projected 5 > 4 floor and > 1*3.
+    const res = velocityGuard({}, ctx([1, 1, 1, 1, 4]));
+    expect(res.pass).toBe(false);
+  });
+
+  it("does not flag below the absolute floor even if the ratio is high", () => {
+    // prior avg 1, today 2 → projected 3, under the floor of 4.
+    expect(velocityGuard({}, ctx([1, 1, 1, 1, 2])).pass).toBe(true);
+  });
+
+  it("passes a normal day within the threshold", () => {
+    // prior avg 5, today 6 → projected 7, under 5*3=15.
+    expect(velocityGuard({}, ctx([5, 5, 5, 5, 6])).pass).toBe(true);
   });
 });
 
