@@ -3,6 +3,7 @@
 
 export * from "./users";
 export * from "./invites";
+export * from "./password-resets";
 export * from "./agents";
 export * from "./webhooks";
 export * from "./projects";

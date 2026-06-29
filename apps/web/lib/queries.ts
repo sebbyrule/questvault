@@ -18,9 +18,10 @@ import {
   webhooks,
   webhookDeliveries,
   appSettings,
+  passwordResets,
 } from "@questvault/db/schema";
 import { auth } from "./auth";
-import { hashToken, isInviteUsable } from "./auth-rules";
+import { hashToken, isInviteUsable, isResetUsable } from "./auth-rules";
 import type { TicketStatus, TicketPriority } from "./format";
 
 export type LabelChip = { id: string; name: string; color: string };
@@ -601,4 +602,14 @@ export async function isOnboardingComplete(): Promise<boolean> {
 export async function hasAnyProject(): Promise<boolean> {
   const [row] = await db.select({ id: projects.id }).from(projects).limit(1);
   return !!row;
+}
+
+/** Resolve a raw reset token to a usable (unused, unexpired) reset, else null. */
+export async function getUsablePasswordReset(rawToken: string) {
+  if (!rawToken) return null;
+  const row = await db.query.passwordResets.findFirst({
+    where: eq(passwordResets.tokenHash, hashToken(rawToken)),
+  });
+  if (!row) return null;
+  return isResetUsable(row) ? row : null;
 }

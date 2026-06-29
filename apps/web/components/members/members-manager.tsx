@@ -14,6 +14,7 @@ import {
   setUserActive,
   revokeInvite,
 } from "@/lib/member-actions";
+import { createPasswordReset } from "@/lib/password-actions";
 import type { MemberRow, PendingInvite } from "@/lib/queries";
 
 const ASSIGNABLE_ROLES = ["admin", "member", "viewer"] as const;
@@ -35,6 +36,25 @@ export function MembersManager({
   const [role, setRole] = useState<(typeof ASSIGNABLE_ROLES)[number]>("member");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Per-user password-reset link (shown once after generation).
+  const [resetFor, setResetFor] = useState<string | null>(null);
+  const [resetLink, setResetLink] = useState<string | null>(null);
+
+  function genReset(userId: string) {
+    setError(null);
+    setResetFor(userId);
+    setResetLink(null);
+    startTransition(async () => {
+      const res = await createPasswordReset(userId);
+      if (!res.ok) {
+        setError(res.error);
+        setResetFor(null);
+        return;
+      }
+      setResetLink(`${window.location.origin}/auth/reset/${res.token}`);
+    });
+  }
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -155,48 +175,79 @@ export function MembersManager({
           {members.map((m) => {
             const isSelf = m.id === currentUserId;
             return (
-              <li key={m.id} className="flex items-center gap-4 px-6 py-3">
-                <Avatar name={m.displayName} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-gray-800">
-                    {m.displayName} {isSelf && <span className="text-gray-400">(you)</span>}
-                  </p>
-                  <p className="truncate text-xs text-gray-400">{m.email}</p>
+              <li key={m.id} className="px-6 py-3">
+                <div className="flex items-center gap-4">
+                  <Avatar name={m.displayName} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-gray-800">
+                      {m.displayName} {isSelf && <span className="text-gray-400">(you)</span>}
+                    </p>
+                    <p className="truncate text-xs text-gray-400">{m.email}</p>
+                  </div>
+
+                  {!m.isActive && (
+                    <span className="rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                      Deactivated
+                    </span>
+                  )}
+
+                  <select
+                    value={ASSIGNABLE_ROLES.includes(m.role as never) ? m.role : "member"}
+                    disabled={pending}
+                    onChange={(e) => run(() => updateUserRole(m.id, e.target.value))}
+                    className="rounded-lg border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:opacity-50"
+                  >
+                    {ASSIGNABLE_ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => genReset(m.id)}
+                    className="rounded-md px-2.5 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100 disabled:opacity-40"
+                  >
+                    Reset password
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={pending || isSelf}
+                    onClick={() => run(() => setUserActive(m.id, !m.isActive))}
+                    title={isSelf ? "You can't deactivate yourself" : undefined}
+                    className={clsx(
+                      "rounded-md px-2.5 py-1 text-xs font-medium transition disabled:opacity-40",
+                      m.isActive
+                        ? "text-red-600 hover:bg-red-50"
+                        : "text-teal-600 hover:bg-teal-50"
+                    )}
+                  >
+                    {m.isActive ? "Deactivate" : "Reactivate"}
+                  </button>
                 </div>
 
-                {!m.isActive && (
-                  <span className="rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
-                    Deactivated
-                  </span>
+                {resetFor === m.id && resetLink && (
+                  <div className="mt-2 rounded-lg border border-brand-200 bg-brand-50 p-3">
+                    <p className="text-xs font-medium text-brand-700">
+                      One-time reset link (shown once, valid 24h):
+                    </p>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <code className="flex-1 truncate rounded bg-white px-2 py-1 text-xs text-gray-700">
+                        {resetLink}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => void navigator.clipboard.writeText(resetLink)}
+                        className="rounded-md bg-brand-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-800"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
                 )}
-
-                <select
-                  value={ASSIGNABLE_ROLES.includes(m.role as never) ? m.role : "member"}
-                  disabled={pending}
-                  onChange={(e) => run(() => updateUserRole(m.id, e.target.value))}
-                  className="rounded-lg border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:opacity-50"
-                >
-                  {ASSIGNABLE_ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-
-                <button
-                  type="button"
-                  disabled={pending || isSelf}
-                  onClick={() => run(() => setUserActive(m.id, !m.isActive))}
-                  title={isSelf ? "You can't deactivate yourself" : undefined}
-                  className={clsx(
-                    "rounded-md px-2.5 py-1 text-xs font-medium transition disabled:opacity-40",
-                    m.isActive
-                      ? "text-red-600 hover:bg-red-50"
-                      : "text-teal-600 hover:bg-teal-50"
-                  )}
-                >
-                  {m.isActive ? "Deactivate" : "Reactivate"}
-                </button>
               </li>
             );
           })}

@@ -23,6 +23,15 @@ export function isInviteUsable(
   return invite.expiresAt.getTime() > now.getTime();
 }
 
+/** A password reset is usable while it is unused and not yet expired. */
+export function isResetUsable(
+  reset: { usedAt: Date | null; expiresAt: Date },
+  now: Date = new Date()
+): boolean {
+  if (reset.usedAt) return false;
+  return reset.expiresAt.getTime() > now.getTime();
+}
+
 /** An admin demoting themselves below admin/owner — must be blocked. */
 export function isSelfLockout(actorId: string, targetId: string, newRole: string): boolean {
   return actorId === targetId && newRole !== "admin" && newRole !== "owner";
@@ -52,6 +61,19 @@ export const acceptSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters").max(200),
 });
 
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8, "Password must be at least 8 characters").max(200),
+});
+
+export const changePasswordSchema = z.object({
+  // Optional: hash-less dev accounts (devpass fallback) have no current password.
+  currentPassword: z.string().max(200).optional().default(""),
+  newPassword: z.string().min(8, "Password must be at least 8 characters").max(200),
+});
+
 export type RegisterInput = z.input<typeof registerSchema>;
 export type InviteInput = z.infer<typeof inviteSchema>;
 export type AcceptInput = z.infer<typeof acceptSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type ChangePasswordInput = z.input<typeof changePasswordSchema>;

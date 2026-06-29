@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   hashToken,
   isInviteUsable,
+  isResetUsable,
   isSelfLockout,
   isSelfDeactivate,
   registerSchema,
@@ -38,6 +39,22 @@ describe("isInviteUsable", () => {
 
   it("is false when expired", () => {
     expect(isInviteUsable({ acceptedAt: null, expiresAt: past }, now)).toBe(false);
+  });
+});
+
+describe("isResetUsable", () => {
+  const now = new Date("2026-06-13T12:00:00.000Z");
+  const future = new Date("2026-06-14T12:00:00.000Z");
+  const past = new Date("2026-06-12T12:00:00.000Z");
+
+  it("is true when unused and not expired", () => {
+    expect(isResetUsable({ usedAt: null, expiresAt: future }, now)).toBe(true);
+  });
+  it("is false once used", () => {
+    expect(isResetUsable({ usedAt: now, expiresAt: future }, now)).toBe(false);
+  });
+  it("is false when expired", () => {
+    expect(isResetUsable({ usedAt: null, expiresAt: past }, now)).toBe(false);
   });
 });
 

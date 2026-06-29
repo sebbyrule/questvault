@@ -13,6 +13,7 @@ const NAV = [
   { href: "/board", label: "Board", icon: "▤" },
   { href: "/projects", label: "Projects", icon: "▣" },
   { href: "/templates", label: "Templates", icon: "❒" },
+  { href: "/account", label: "Account", icon: "☺" },
 ];
 
 // Admin/owner-only navigation.
